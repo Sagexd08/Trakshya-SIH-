@@ -27,3 +27,5 @@ frontend/.swc/
 **/pnpm-lock.yaml
 **/yarn.lock
 
+
+.vercel

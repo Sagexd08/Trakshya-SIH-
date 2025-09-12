@@ -10,6 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@clerk/nextjs": "^6.32.0",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-avatar": "^1.1.10",
     "@radix-ui/react-dialog": "^1.1.15",
@@ -18,6 +19,7 @@
     "@radix-ui/react-slot": "^1.2.3",
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-tooltip": "^1.2.8",
+    "@supabase/supabase-js": "^2.57.4",
     "@tanstack/react-query": "^5.87.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
