@@ -1,4 +1,4 @@
-/// <reference types="vitest" />
+
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { GET as LiveStationGET } from './route';
 
