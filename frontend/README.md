@@ -1,4 +1,7 @@
 # Trakshya — AI-Powered Railway Digital Twin (Frontend)
+[![CI](https://github.com/Sagexd08/Trakshya-SIH-/actions/workflows/ci.yml/badge.svg)](https://github.com/Sagexd08/Trakshya-SIH-/actions/workflows/ci.yml)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/import?s=https%3A%2F%2Fgithub.com%2FSagexd08%2FTrakshya-SIH-&env=NEXT_PUBLIC_MAPBOX_TOKEN,IRCTC_RAPIDAPI_KEY&project-name=trakshya&repository-name=Trakshya-SIH-)
+
 
 A Next.js + TypeScript dashboard showcasing real-time Indian Railways operations with 3D/2D maps, traffic heatmaps, conflicts, energy optimization, and scenario simulations.
 
@@ -58,6 +61,35 @@ npm run start
 
 ### Energy aggregation: /api/energy/series
 - Aggregates current activity across several major stations via the live-station endpoint
+
+## API Usage
+
+### GET /api/irctc/live-station
+Example (fetch trains arriving/departing New Delhi in last 2 hours):
+
+```
+curl "http://localhost:3031/api/irctc/live-station?station_code=NDLS&hours=2"
+```
+Response (shape mirrors RapidAPI, errors include { error } with proper status codes):
+- 200 OK: upstream JSON passthrough
+- 400: when station_code is missing
+- 500: when server is missing IRCTC_RAPIDAPI_KEY
+- 502: when upstream returns 4xx/5xx
+
+### GET /api/energy/series
+Aggregates current activity across multiple stations and synthesizes a 24-hour energy series.
+
+```
+curl "http://localhost:3031/api/energy/series?stations=NDLS,CSMT,HWH&hours=2"
+```
+Returns:
+```
+{
+  "points": [{ "h": 0, "base": 123, "opt": 101 }, ... x24],
+  "meta": { "stations": ["NDLS","CSMT","HWH"], "hours": 2 }
+}
+```
+
 - Produces a 24-point series `{ h, base, opt }` and `meta` for KPIs
 - Chart: `src/components/EnergyChart.tsx`
 
