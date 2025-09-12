@@ -17,6 +17,9 @@ frontend/.next/
 frontend/node_modules/
 frontend/.env.local
 frontend/.env*
+# Allow committing an example env file for teammates
+!frontend/.env.example
+
 frontend/.turbo/
 frontend/.swc/
 
