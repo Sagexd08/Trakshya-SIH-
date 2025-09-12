@@ -1,0 +1,99 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Golden Quadrilateral (Mumbai–Delhi)",
+        "corridor": "Golden Quadrilateral",
+        "active": true,
+        "bottleneck": false,
+        "track_type": "passenger",
+        "electrified": true,
+        "importance": 5
+      },
+      "geometry": {"type":"LineString","coordinates":[[72.8777,19.0760],[73.0220,19.1900],[75.8577,22.7196],[76.7794,24.5854],[77.2090,28.6139]]}
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Golden Quadrilateral (Delhi–Kolkata)",
+        "corridor": "Golden Quadrilateral",
+        "active": true,
+        "bottleneck": false,
+        "track_type": "passenger",
+        "electrified": true,
+        "importance": 5
+      },
+      "geometry": {"type":"LineString","coordinates":[[77.2090,28.6139],[82.9739,25.3176],[88.3639,22.5726]]}
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Golden Quadrilateral (Kolkata–Chennai)",
+        "corridor": "Golden Quadrilateral",
+        "active": true,
+        "bottleneck": false,
+        "track_type": "passenger",
+        "electrified": true,
+        "importance": 5
+      },
+      "geometry": {"type":"LineString","coordinates":[[88.3639,22.5726],[85.8245,20.2961],[80.2707,13.0827]]}
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Golden Quadrilateral (Chennai–Mumbai)",
+        "corridor": "Golden Quadrilateral",
+        "active": true,
+        "bottleneck": true,
+        "track_type": "passenger",
+        "electrified": true,
+        "importance": 5
+      },
+      "geometry": {"type":"LineString","coordinates":[[80.2707,13.0827],[78.7047,10.7905],[77.1025,11.0168],[75.7804,15.4910],[72.8777,19.0760]]}
+    },
+
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Western DFC (Delhi–Mumbai)",
+        "corridor": "WDFC",
+        "active": true,
+        "bottleneck": false,
+        "track_type": "freight",
+        "electrified": true,
+        "importance": 4
+      },
+      "geometry": {"type":"LineString","coordinates":[[77.2090,28.6139],[76.3890,27.2156],[75.7873,26.9124],[72.5714,23.0225],[72.8777,19.0760]]}
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Eastern DFC (Delhi–Kolkata)",
+        "corridor": "EDFC",
+        "active": false,
+        "bottleneck": false,
+        "track_type": "freight",
+        "electrified": true,
+        "importance": 4
+      },
+      "geometry": {"type":"LineString","coordinates":[[77.2090,28.6139],[80.9462,26.8467],[83.0083,25.3176],[88.3639,22.5726]]}
+    },
+
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "High-Speed Demonstrator (Ahmedabad–Mumbai)",
+        "corridor": "HSR-W",
+        "active": false,
+        "bottleneck": false,
+        "track_type": "high-speed",
+        "electrified": true,
+        "importance": 3
+      },
+      "geometry": {"type":"LineString","coordinates":[[72.5714,23.0225],[72.8777,19.0760]]}
+    }
+  ]
+}
+

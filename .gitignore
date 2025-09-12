@@ -1,0 +1,26 @@
+# Root project ignores for Trakshya
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+*.log
+
+# Vercel
+.vercel/
+
+# Coverage / build outputs
+coverage/
+dist/
+
+# Frontend ignores
+frontend/.next/
+frontend/node_modules/
+frontend/.env.local
+frontend/.env*
+frontend/.turbo/
+frontend/.swc/
+
+# Lock files from other package managers
+**/pnpm-lock.yaml
+**/yarn.lock
+

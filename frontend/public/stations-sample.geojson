@@ -1,0 +1,16 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {"type":"Feature","properties":{"name":"Mumbai CSMT","rank":1,"station_type":"Terminal","passenger_volume": 600000},"geometry":{"type":"Point","coordinates":[72.8358,18.9402]}},
+    {"type":"Feature","properties":{"name":"New Delhi","rank":1,"station_type":"Terminal","passenger_volume": 500000},"geometry":{"type":"Point","coordinates":[77.2183,28.643]}},
+    {"type":"Feature","properties":{"name":"Howrah Jn","rank":1,"station_type":"Terminal","passenger_volume": 500000},"geometry":{"type":"Point","coordinates":[88.3426,22.5855]}},
+    {"type":"Feature","properties":{"name":"Chennai Central","rank":1,"station_type":"Terminal","passenger_volume": 450000},"geometry":{"type":"Point","coordinates":[80.2750,13.0825]}},
+    {"type":"Feature","properties":{"name":"Ahmedabad Jn","rank":2,"station_type":"Junction","passenger_volume": 250000},"geometry":{"type":"Point","coordinates":[72.5714,23.0225]}},
+    {"type":"Feature","properties":{"name":"Jaipur Jn","rank":3,"station_type":"Junction","passenger_volume": 180000},"geometry":{"type":"Point","coordinates":[75.7873,26.9124]}},
+    {"type":"Feature","properties":{"name":"Varanasi Jn","rank":3,"station_type":"Junction","passenger_volume": 200000},"geometry":{"type":"Point","coordinates":[82.9739,25.3176]}},
+    {"type":"Feature","properties":{"name":"Nagpur","rank":2,"station_type":"Junction","passenger_volume": 220000},"geometry":{"type":"Point","coordinates":[79.0897,21.1463]}},
+    {"type":"Feature","properties":{"name":"Kanpur Central","rank":2,"station_type":"Junction","passenger_volume": 300000},"geometry":{"type":"Point","coordinates":[80.3319,26.4499]}},
+    {"type":"Feature","properties":{"name":"Vijayawada Jn","rank":3,"station_type":"Junction","passenger_volume": 150000},"geometry":{"type":"Point","coordinates":[80.6185,16.5062]}}
+  ]
+}
+
