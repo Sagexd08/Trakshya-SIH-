@@ -1,6 +1,8 @@
 "use client";
 import mapboxgl from "mapbox-gl";
 import { useEffect, useRef, useState } from "react";
+import { connectWS } from "@/lib/wsClient";
+import { toast } from "sonner";
 
 const TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "";
 if (TOKEN) mapboxgl.accessToken = TOKEN;
@@ -8,7 +10,7 @@ if (TOKEN) mapboxgl.accessToken = TOKEN;
 // Simple mock train generator simulating nationwide movement
 // Keep numbers modest to avoid perf issues
 
-type TPoint = { id: string; lng: number; lat: number; speed: number; weight: number };
+type TPoint = { id: string; lng: number; lat: number; speed: number; weight: number; trainNo?: string; name?: string; nextStop?: string };
 
 // Minimal mapping of station names in sample geojson to IRCTC station codes
 const STATION_NAME_TO_CODE: Record<string, string> = {
@@ -27,6 +29,8 @@ const STATION_NAME_TO_CODE: Record<string, string> = {
 // GeoJSON feature type for sample stations
 type StationFeature = { properties?: { name?: string }; geometry: { coordinates: [number, number] } };
 
+
+type WSMessage = { type?: string; count?: number; text?: string };
 
 
 function seedMockTrains(n = 150): TPoint[] {
@@ -51,7 +55,12 @@ function seedMockTrains(n = 150): TPoint[] {
     const lat = blat + jitterLat;
     const speed = 40 + Math.random() * 80; // 40-120 km/h
     const weight = Math.min(1, Math.max(0, 0.5 + (Math.random() - 0.5) * 0.8));
-    out.push({ id: `RT${i}`, lng, lat, speed, weight });
+    out.push({ id: `RT${i}`,
+      lng, lat, speed, weight,
+      trainNo: `TR${1000 + i}`,
+      name: `Mock Express ${i}`,
+      nextStop: ["NDLS","CSMT","HWH","MAS","ADI","JP","BSB"][i % 7],
+    });
   }
   return out;
 }
@@ -62,15 +71,20 @@ export default function RealTimeTraffic() {
 
   const [, setStats] = useState<{ active: number; avgSpeed: number; congestion: number }>({ active: 0, avgSpeed: 0, congestion: 0 });
 
+
+    const mapStyle = (typeof window !== 'undefined' && localStorage.getItem('mapStyle')) || "mapbox://styles/mapbox/dark-v11";
+
   useEffect(() => {
+
     if (!ref.current || !TOKEN) return;
     const map = new mapboxgl.Map({
       container: ref.current,
-      style: "mapbox://styles/mapbox/dark-v11",
+      style: mapStyle,
       center: [79, 22],
       zoom: 5,
       pitch: 45,
       bearing: -15,
+
       antialias: true,
     });
 
@@ -80,18 +94,57 @@ export default function RealTimeTraffic() {
     let trains: TPoint[] = seedMockTrains(180);
 
 	    // Playback history (0 = live, 1..30 minutes ago)
+
+      // React to global map style changes from Settings
+      if (typeof window !== 'undefined') {
+        const onStorage = (e: StorageEvent) => { if (e.key === 'mapStyle') location.reload(); };
+        window.addEventListener('storage', onStorage);
+      }
+
 	    const history: TPoint[][] = [trains.map((p) => ({ ...p }))];
 	    let playback = 0;
 
+    let preferLive = true;
+    // Advanced filtering state (map control updates these values)
+    const filters = { q: "", minSpeed: 0, minWeight: 0, slowOnly: false, inView: false } as {
+      q: string; minSpeed: number; minWeight: number; slowOnly: boolean; inView: boolean;
+    };
 
-    const toFC = (): GeoJSON.FeatureCollection<GeoJSON.Point, { id: string; weight: number; speed: number }> => ({
+    const getFilteredTrains = (): TPoint[] => {
+      const q = filters.q.trim().toLowerCase();
+      const bounds = filters.inView ? map.getBounds() : null;
+      return trains.filter((t) => {
+        if (filters.slowOnly && t.speed >= 50) return false;
+        if (t.speed < filters.minSpeed) return false;
+        if (t.weight < filters.minWeight) return false;
+        if (q) {
+          const hay = `${t.trainNo ?? ""} ${t.name ?? ""}`.toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+        if (bounds) {
+          if (!bounds.contains({ lng: t.lng, lat: t.lat })) return false;
+        }
+        return true;
+      });
+    };
+
+
+    const toFC = (): GeoJSON.FeatureCollection<GeoJSON.Point, { id: string; weight: number; speed: number; trainNo?: string; name?: string; nextStop?: string }> => ({
       type: "FeatureCollection",
-      features: trains.map((t) => ({
+      features: getFilteredTrains().map((t) => ({
         type: "Feature",
-        properties: { id: t.id, weight: t.weight, speed: t.speed },
+        properties: { id: t.id, weight: t.weight, speed: t.speed, trainNo: t.trainNo, name: t.name, nextStop: t.nextStop },
         geometry: { type: "Point", coordinates: [t.lng, t.lat] },
       })),
     });
+
+    const updateSources = () => {
+      const src = map.getSource("traffic") as mapboxgl.GeoJSONSource | undefined;
+      if (src) src.setData(toFC());
+      const csrc = map.getSource("traffic-cluster") as mapboxgl.GeoJSONSource | undefined;
+      if (csrc) csrc.setData(toFC());
+    };
+
 
     map.on("load", () => {
       // Heatmap source for density visualization
@@ -194,6 +247,80 @@ export default function RealTimeTraffic() {
 	            if (snap) {
 	              trains = snap.map((p) => ({ ...p }));
 	              const src = map.getSource("traffic") as mapboxgl.GeoJSONSource | undefined;
+      // Live/Simulated mode toggle control
+      const modeCtrl: mapboxgl.IControl = {
+        onAdd: () => {
+          const el = document.createElement("div");
+          el.className = "mapboxgl-ctrl p-2 rounded bg-black/60 text-xs text-slate-200";
+          const render = () => {
+            el.innerHTML = `<div style=\"display:flex;gap:8px;align-items:center\">`+
+              `<div style=\"opacity:.7\">Mode</div>`+
+              `<button data-btn class=\"px-2 py-1 rounded border\">${preferLive ? "Live" : "Simulated"}</button>`+
+              `</div>`;
+            const btn = el.querySelector("[data-btn]") as HTMLButtonElement;
+            btn.onclick = () => { preferLive = !preferLive; render(); };
+          };
+          render();
+          return el;
+        },
+        onRemove: () => {},
+      };
+      map.addControl(modeCtrl, "top-right");
+
+      // Filters control (search, speed/weight sliders, toggles)
+      const filtersCtrl: mapboxgl.IControl = {
+        onAdd: () => {
+          const el = document.createElement("div");
+          el.className = "mapboxgl-ctrl p-2 rounded bg-black/60 text-xs text-slate-200";
+          const render = () => {
+            el.innerHTML = `
+              <div style=\"display:grid;gap:6px;min-width:240px\">
+                <div style=\"display:flex;gap:6px;align-items:center\">
+                  <div style=\"opacity:.7\">Search</div>
+                  <input data-q type=\"text\" placeholder=\"Train no/name\" style=\"flex:1;padding:2px 6px;border-radius:4px;background:#0b1220;border:1px solid #334155;color:#e5e7eb\" />
+                </div>
+                <div style=\"display:flex;gap:6px;align-items:center\">
+                  <div style=\"opacity:.7\">Min speed</div>
+                  <input data-mins type=\"range\" min=\"0\" max=\"120\" step=\"5\" value=\"0\" style=\"flex:1\" />
+                  <div data-mins-v>0</div>
+                </div>
+                <div style=\"display:flex;gap:6px;align-items:center\">
+                  <div style=\"opacity:.7\">Min weight</div>
+                  <input data-minw type=\"range\" min=\"0\" max=\"1\" step=\"0.1\" value=\"0\" style=\"flex:1\" />
+                  <div data-minw-v>0.0</div>
+                </div>
+                <div style=\"display:flex;gap:10px;align-items:center;justify-content:space-between\">
+                  <label style=\"display:flex;gap:6px;align-items:center\"><input data-slow type=\"checkbox\"/> Slow only</label>
+                  <label style=\"display:flex;gap:6px;align-items:center\"><input data-invw type=\"checkbox\"/> In view</label>
+                </div>
+              </div>`;
+            const q = el.querySelector("[data-q]") as HTMLInputElement;
+            const mins = el.querySelector("[data-mins]") as HTMLInputElement;
+            const minsv = el.querySelector("[data-mins-v]") as HTMLElement;
+            const minw = el.querySelector("[data-minw]") as HTMLInputElement;
+            const minwv = el.querySelector("[data-minw-v]") as HTMLElement;
+            const slow = el.querySelector("[data-slow]") as HTMLInputElement;
+            const invw = el.querySelector("[data-invw]") as HTMLInputElement;
+            q.value = filters.q; mins.value = String(filters.minSpeed); minsv.textContent = String(filters.minSpeed);
+            minw.value = String(filters.minWeight); minwv.textContent = Number(filters.minWeight).toFixed(1);
+            slow.checked = filters.slowOnly; invw.checked = filters.inView;
+            const apply = () => { updateSources(); updateStats(); };
+            q.oninput = () => { filters.q = q.value; apply(); };
+            mins.oninput = () => { filters.minSpeed = Number(mins.value); minsv.textContent = String(filters.minSpeed); apply(); };
+            minw.oninput = () => { filters.minWeight = Number(minw.value); minwv.textContent = Number(filters.minWeight).toFixed(1); apply(); };
+            slow.onchange = () => { filters.slowOnly = slow.checked; apply(); };
+            invw.onchange = () => { filters.inView = invw.checked; apply(); };
+          };
+          render();
+          return el;
+        },
+        onRemove: () => {}
+      };
+      map.addControl(filtersCtrl, "top-right");
+
+      // Refresh when moving if in-view filtering is on
+      map.on("moveend", () => { if (filters.inView) { updateSources(); updateStats(); } });
+
 	              if (src) src.setData(toFC());
 	              const csrc = map.getSource("traffic-cluster") as mapboxgl.GeoJSONSource | undefined;
 	              if (csrc) csrc.setData(toFC());
@@ -223,6 +350,47 @@ export default function RealTimeTraffic() {
           "circle-stroke-color": "#0b1220",
         },
       });
+
+      // Click to see train/station details
+      map.on("click", "traffic-circles", (e: mapboxgl.MapMouseEvent & { features?: mapboxgl.MapboxGeoJSONFeature[] }) => {
+        const f = (e as unknown as { features?: mapboxgl.MapboxGeoJSONFeature[] }).features?.[0];
+        const p = (f?.properties ?? {}) as Record<string, unknown>;
+        const trainNo = String(p.trainNo ?? p.id ?? "");
+        const name = String(p.name ?? "");
+        const nextStop = String(p.nextStop ?? "");
+        const speed = Number(p.speed ?? 0);
+        const html = `<div style="font:12px/1.4 system-ui, -apple-system, Segoe UI, Roboto; min-width:180px">
+          <div style="font-weight:600">${name || "Train/Station"}</div>
+          <div>${trainNo ? `No: ${trainNo}` : ""}</div>
+          <div>Speed: ${Number.isFinite(speed) ? speed.toFixed(0) : "-"} km/h</div>
+          <div>${nextStop ? `Next: ${nextStop}` : ""}</div>
+        </div>`;
+        new mapboxgl.Popup({ closeButton: false, closeOnMove: true })
+          .setLngLat(e.lngLat)
+          .setHTML(html)
+          .addTo(map);
+      });
+      map.on("mouseenter", "traffic-circles", () => { map.getCanvas().style.cursor = "pointer"; });
+      map.on("mouseleave", "traffic-circles", () => { map.getCanvas().style.cursor = ""; });
+
+      // Zoom into clusters on click
+      map.on("click", "traffic-clusters", async (e: mapboxgl.MapMouseEvent & { features?: mapboxgl.MapboxGeoJSONFeature[] }) => {
+        const f = e.features?.[0];
+        const props = (f?.properties ?? {}) as Record<string, unknown>;
+        const clusterId = props?.cluster_id as number | undefined;
+        const src = map.getSource("traffic-cluster") as mapboxgl.GeoJSONSource & { getClusterExpansionZoom?: (id: number, cb: (err: unknown, zoom: number) => void) => void };
+        if (src && typeof src.getClusterExpansionZoom === "function" && clusterId != null) {
+          src.getClusterExpansionZoom(clusterId, (err: unknown, zoom: number) => {
+            if (!err && Number.isFinite(zoom)) {
+              const center = (f?.geometry as GeoJSON.Point).coordinates as [number, number];
+              map.easeTo({ center, zoom });
+            }
+          });
+        }
+      });
+      map.on("mouseenter", "traffic-clusters", () => { map.getCanvas().style.cursor = "pointer"; });
+      map.on("mouseleave", "traffic-clusters", () => { map.getCanvas().style.cursor = ""; });
+
 
       // Summary stats panel
       const ctrl: mapboxgl.IControl = {
@@ -255,6 +423,7 @@ export default function RealTimeTraffic() {
 
 	      // Try to hydrate from live IRCTC data; fallback to mock remains active
 	      async function tryFetchLiveOnce() {
+        if (!preferLive) return false as const;
 	        try {
 	          const stationsFC = await fetch("/stations-sample.geojson").then((r) => r.json());
 	          const stationFeatures = (stationsFC?.features || []) as StationFeature[];
@@ -269,25 +438,39 @@ export default function RealTimeTraffic() {
 	            const res = await fetch(url, { cache: "no-store" });
 	            if (!res.ok) throw new Error(`Upstream ${res.status}`);
 	            const data = await res.json();
-	            const trainsArr = (data?.data?.trains || data?.data || data?.trains || []).filter(Boolean);
-	            const delays: number[] = (trainsArr as Array<{ delay_dep?: number; delay_arr?: number; delay?: number }>)
-              .map((t) => Number((t?.delay_dep ?? t?.delay_arr ?? t?.delay) || 0))
-              .filter((n) => Number.isFinite(n));
-	            const avgDelay = delays.length ? delays.reduce((a, b) => a + b, 0) / delays.length : 0;
-	            const count = trainsArr.length;
-	            const speed = Math.max(10, 120 - Math.min(100, avgDelay * 2));
-	            const weight = Math.max(0, Math.min(1, count / 50));
-	            return { id: code, lng: s.coord[0], lat: s.coord[1], speed, weight } as TPoint;
+	            const trainsArr = (data?.data?.trains || data?.data || data?.trains || []).filter(Boolean) as unknown[];
+            const pts: TPoint[] = (trainsArr as unknown[]).slice(0, 75).map((raw, idx) => {
+              const t = raw as Record<string, unknown>;
+              const delayNum = Number((t?.["delay_dep"] ?? t?.["delay_arr"] ?? t?.["delay"]) || 0);
+              const speed = Math.max(10, 120 - Math.min(100, delayNum * 2));
+              const dayVal = Number((t?.["day"] as unknown) ?? 1);
+              const weight = Math.max(0, Math.min(1, (Number.isFinite(dayVal) ? dayVal : 1) / 10 || 0.6));
+              const trainNo = String((t?.["trainNo"] ?? t?.["train_number"] ?? t?.["number"] ?? t?.["no"] ?? "")).trim();
+              const name = String((t?.["train_name"] ?? t?.["name"] ?? "")).trim();
+              const toObj = t?.["to"] as Record<string, unknown> | undefined;
+              const nextStop = String((t?.["to_station_name"] ?? toObj?.["name"] ?? s.name ?? "")).trim();
+              const j1 = (Math.random() - 0.5) * 0.18;
+              const j2 = (Math.random() - 0.5) * 0.18;
+              const lng = s.coord[0] + j1;
+              const lat = s.coord[1] + j2;
+              return { id: `${code}-${trainNo || idx}`, lng, lat, speed, weight, trainNo, name, nextStop } as TPoint;
+            });
+
+	            // const delays: number[] = (trainsArr as Array<{ delay_dep?: number; delay_arr?: number; delay?: number }>)
+              // .map((t) => Number((t?.delay_dep ?? t?.delay_arr ?? t?.delay) || 0))
+              // .filter((n) => Number.isFinite(n));
+	            // const avgDelay = delays.length ? delays.reduce((a, b) => a + b, 0) / delays.length : 0;
+	            // const count = trainsArr.length;
+	            // const speed = Math.max(10, 120 - Math.min(100, avgDelay * 2));
+	            // const weight = Math.max(0, Math.min(1, count / 50));
+	            return pts;
 	          });
 
-	          const results = await Promise.allSettled<TPoint>(tasks);
-	          const okPoints: TPoint[] = results.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+	          const results = await Promise.allSettled<TPoint[]>(tasks);
+	          const okPoints: TPoint[] = results.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
 	          if (!okPoints.length) return false as const;
 	          trains = okPoints;
-	          const src = map.getSource("traffic") as mapboxgl.GeoJSONSource | undefined;
-	          if (src) src.setData(toFC());
-	          const csrc = map.getSource("traffic-cluster") as mapboxgl.GeoJSONSource | undefined;
-	          if (csrc) csrc.setData(toFC());
+	          updateSources();
 	          history.unshift(trains.map((p) => ({ ...p })));
 	          if (history.length > 31) history.pop();
 	          updateStats();
@@ -337,7 +520,22 @@ export default function RealTimeTraffic() {
       if (poller) clearInterval(poller);
       map.remove();
     };
+  }, [mapStyle]);
+
+  // Connect to WebSocket for real-time notifications
+  useEffect(() => {
+    const ws = connectWS((msg) => {
+      const m = msg as WSMessage;
+      if (m?.type === 'train_positions_inserted') {
+        const n = Number(m?.count || 0);
+        if (n > 0) toast.success(`${n} train position${n === 1 ? '' : 's'} updated`);
+      } else if (m?.type === 'notice') {
+        if (m?.text) toast.message(m.text);
+      }
+    });
+    return () => { try { (ws as unknown as WebSocket)?.close?.(); } catch {} };
   }, []);
+
 
   if (!TOKEN) {
     return (

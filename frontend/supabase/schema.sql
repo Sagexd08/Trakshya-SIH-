@@ -24,3 +24,7 @@ create policy if not exists "scenarios-read" on public.scenarios for select usin
 alter table public.train_positions enable row level security;
 create policy if not exists "train_positions-read" on public.train_positions for select using (true);
 
+
+-- Indexes for faster lookups
+create index if not exists idx_train_positions_ts on public.train_positions (ts desc);
+create index if not exists idx_train_positions_train_no_ts on public.train_positions (train_no, ts desc);

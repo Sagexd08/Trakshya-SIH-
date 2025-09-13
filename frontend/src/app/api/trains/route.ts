@@ -41,6 +41,10 @@ export async function POST(req: NextRequest) {
     const sb = createSupabaseAdmin();
     const { data, error } = await sb.from("train_positions").insert(rows).select("id,train_no,lat,lon,speed_kmph,ts");
     if (error) throw error;
+    try {
+      const { broadcast } = await import("@/lib/wsHub");
+      broadcast({ type: "train_positions_inserted", count: data?.length ?? 0, t: Date.now() });
+    } catch {}
     return new Response(JSON.stringify({ inserted: data?.length ?? 0, rows: data }), { status: 201, headers: { "content-type": "application/json" } });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);

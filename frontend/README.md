@@ -1,6 +1,6 @@
 # Trakshya — AI-Powered Railway Digital Twin (Frontend)
 [![CI](https://github.com/Sagexd08/Trakshya-SIH-/actions/workflows/ci.yml/badge.svg)](https://github.com/Sagexd08/Trakshya-SIH-/actions/workflows/ci.yml)
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/import?s=https%3A%2F%2Fgithub.com%2FSagexd08%2FTrakshya-SIH-&env=NEXT_PUBLIC_MAPBOX_TOKEN,IRCTC_RAPIDAPI_KEY&project-name=trakshya&repository-name=Trakshya-SIH-)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/import?s=https%3A%2F%2Fgithub.com%2FSagexd08%2FTrakshya-SIH-&env=NEXT_PUBLIC_MAPBOX_TOKEN,IRCTC_RAPIDAPI_KEY&project-name=trakshya-sih&repository-name=Trakshya-SIH-)
 
 
 A Next.js + TypeScript dashboard showcasing real-time Indian Railways operations with 3D/2D maps, traffic heatmaps, conflicts, energy optimization, and scenario simulations.

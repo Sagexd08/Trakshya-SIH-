@@ -1,4 +1,5 @@
 import ConflictHeatmap from "@/components/ConflictHeatmap";
+import CongestionTrendChart from "@/components/CongestionTrendChart";
 
 export default function Conflicts(){
   // Mock KPIs for demo purposes
@@ -21,6 +22,10 @@ export default function Conflicts(){
       <div className="rounded-md border border-neutral-800 bg-neutral-900 p-2">
         <div className="text-sm opacity-80 mb-2">Time–Distance Heatmap</div>
         <ConflictHeatmap/>
+      </div>
+      <div className="rounded-md border border-neutral-800 bg-neutral-900 p-3">
+        <div className="text-sm opacity-80 mb-2">Congestion Trend</div>
+        <CongestionTrendChart/>
       </div>
     </div>
   );
