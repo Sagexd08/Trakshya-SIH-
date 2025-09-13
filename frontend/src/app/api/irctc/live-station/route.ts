@@ -51,7 +51,9 @@ export async function GET(req: NextRequest) {
 
   const key = process.env.IRCTC_RAPIDAPI_KEY;
   if (!key) {
-    return new Response(JSON.stringify({ error: "Server missing IRCTC_RAPIDAPI_KEY" }), { status: 500, headers: { "content-type": "application/json" } });
+    // Graceful mock so frontend can operate without secrets
+    const payload = { data: { trains: [] }, meta: { mock: true, reason: "missing_IRCTC_RAPIDAPI_KEY" } };
+    return new Response(JSON.stringify(payload), { status: 200, headers: { "content-type": "application/json" } });
   }
 
   const cacheKey = `${station}|${hours}`;
@@ -79,12 +81,14 @@ export async function GET(req: NextRequest) {
     let data: unknown = null;
     try { data = JSON.parse(text) as unknown; } catch { data = text; }
 
-    const status = upstream.ok ? 200 : 502;
-    const payload = upstream.ok ? data : { error: "Upstream error", status: upstream.status, data };
-
-    // Cache only successful responses
+    let status = 200;
+    let payload: unknown;
     if (upstream.ok) {
+      payload = data;
+      // Cache only successful responses
       cache.set(cacheKey, { expiry: Date.now() + CACHE_TTL_MS, payload, status });
+    } else {
+      payload = { data: { trains: [] }, meta: { mock: true, reason: "upstream_error", status: upstream.status } };
     }
 
     const dt = Date.now() - t0;

@@ -13,6 +13,14 @@ import { createSupabaseAdmin } from "@/lib/supabase/server";
 
 export async function GET() {
   try {
+    const hasSupabase = !!process.env.SUPABASE_URL && !!process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!hasSupabase) {
+      return new Response(
+        JSON.stringify({ positions: [], meta: { mock: true, reason: "missing_supabase_env" } }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    }
+
     const sb = createSupabaseAdmin();
     const { data, error } = await sb
       .from("train_positions")
@@ -29,6 +37,14 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    const hasSupabase = !!process.env.SUPABASE_URL && !!process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!hasSupabase) {
+      return new Response(
+        JSON.stringify({ inserted: 0, rows: [], meta: { mock: true, reason: "missing_supabase_env" } }),
+        { status: 202, headers: { "content-type": "application/json" } }
+      );
+    }
+
     const body = await req.json();
     const items = Array.isArray(body) ? body : [body];
     const rows = items.map((x) => ({
