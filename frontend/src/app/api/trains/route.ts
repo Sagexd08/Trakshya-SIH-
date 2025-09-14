@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { createSupabaseAdmin } from "@/lib/supabase/server";
+import { getCurrentUserRole, hasRole } from "@/lib/authz";
 
 // Expected table in Supabase:
 // create table if not exists public.train_positions (
@@ -43,6 +44,11 @@ export async function POST(req: NextRequest) {
         JSON.stringify({ inserted: 0, rows: [], meta: { mock: true, reason: "missing_supabase_env" } }),
         { status: 202, headers: { "content-type": "application/json" } }
       );
+    }
+
+    const role = await getCurrentUserRole();
+    if (!hasRole(role, ["admin", "controller"])) {
+      return new Response(JSON.stringify({ error: "forbidden" }), { status: 403, headers: { "content-type": "application/json" } });
     }
 
     const body = await req.json();
