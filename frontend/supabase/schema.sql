@@ -136,3 +136,5 @@ create policy if not exists "energy_logs-write" on public.energy_logs for all us
 alter publication supabase_realtime add table public.trains;
 alter publication supabase_realtime add table public.signals;
 alter publication supabase_realtime add table public.conflicts;
+alter publication supabase_realtime add table public.train_positions;
+alter publication supabase_realtime add table public.energy_logs;

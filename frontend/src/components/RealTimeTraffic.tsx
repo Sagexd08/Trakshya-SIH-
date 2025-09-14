@@ -2,6 +2,7 @@
 import mapboxgl from "mapbox-gl";
 import { useEffect, useRef, useState } from "react";
 import { connectWS } from "@/lib/wsClient";
+import { subscribeTrainPositions } from "@/lib/supabase/realtime";
 import { toast } from "sonner";
 
 const TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "";
@@ -534,6 +535,16 @@ export default function RealTimeTraffic() {
       }
     });
     return () => { try { (ws as unknown as WebSocket)?.close?.(); } catch {} };
+  }, []);
+
+  // Supabase Realtime: toast on new train position inserts
+  useEffect(() => {
+    try {
+      const off = subscribeTrainPositions(() => {
+        try { toast.message("New train position received"); } catch {}
+      });
+      return () => { try { off?.(); } catch {} };
+    } catch {}
   }, []);
 
 
