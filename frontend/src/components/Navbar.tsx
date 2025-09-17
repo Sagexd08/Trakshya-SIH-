@@ -22,7 +22,8 @@ import { useEffect, useState } from "react";
 import { useTheme } from "next-themes";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from "@clerk/nextjs";
+// Disable Clerk components for now to prevent server action errors
+const hasClerk = false; // Set to false to disable Clerk components
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Progress } from "@/components/ui/progress";
@@ -368,25 +369,15 @@ export default function Navbar({ title }: { title: string }) {
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {/* User Authentication */}
-        <SignedOut>
-          <SignInButton>
-            <Button variant="secondary" size="sm">Sign in</Button>
-          </SignInButton>
-          <SignUpButton>
-            <Button variant="outline" size="sm">Sign up</Button>
-          </SignUpButton>
-        </SignedOut>
-        <SignedIn>
-          <UserButton
-            afterSignOutUrl="/"
-            appearance={{
-              elements: {
-                avatarBox: "w-8 h-8"
-              }
-            }}
-          />
-        </SignedIn>
+        {/* User Authentication - Demo Mode */}
+        <div className="flex gap-2">
+          <Button variant="secondary" size="sm" disabled>
+            Sign in (Demo)
+          </Button>
+          <Button variant="outline" size="sm" disabled>
+            Sign up (Demo)
+          </Button>
+        </div>
 
         {/* AI Assistant Quick Access */}
         <Button variant="ghost" size="icon" asChild>
