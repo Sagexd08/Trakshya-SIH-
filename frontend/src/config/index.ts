@@ -58,14 +58,38 @@ const parseEnv = () => {
     return {
       NODE_ENV: process.env.NODE_ENV || 'development',
       NEXT_PUBLIC_APP_NAME: 'Trakshya',
-      NEXT_PUBLIC_APP_VERSION: '1.0.0',
+      NEXT_PUBLIC_APP_VERSION: '2.0.0',
       NEXT_PUBLIC_SITE_URL: 'http://localhost:3031',
-      NEXT_PUBLIC_ENABLE_AI: 'true',
-      NEXT_PUBLIC_ENABLE_ANALYTICS: 'false',
-      NEXT_PUBLIC_ENABLE_MONITORING: 'false',
-      NEXT_PUBLIC_API_BASE: '/api',
+      NEXT_PUBLIC_API_BASE: 'http://localhost:3031/api',
       API_RATE_LIMIT: 100,
       API_TIMEOUT: 30000,
+
+      // External Services
+      NEXT_PUBLIC_MAPBOX_TOKEN: process.env.NEXT_PUBLIC_MAPBOX_TOKEN,
+      IRCTC_RAPIDAPI_KEY: process.env.IRCTC_RAPIDAPI_KEY,
+      GOOGLE_GEMINI_API_KEY: process.env.GOOGLE_GEMINI_API_KEY,
+
+      // Authentication
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
+      CLERK_SECRET_KEY: process.env.CLERK_SECRET_KEY,
+
+      // Database
+      SUPABASE_URL: process.env.SUPABASE_URL,
+      SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY,
+      SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
+
+      // Monitoring & Analytics
+      NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
+      NEXT_PUBLIC_ANALYTICS_ID: process.env.NEXT_PUBLIC_ANALYTICS_ID,
+      LOG_LEVEL: 'info',
+
+      // Feature Flags
+      NEXT_PUBLIC_ENABLE_AI: 'true',
+      NEXT_PUBLIC_ENABLE_REALTIME: 'true',
+      NEXT_PUBLIC_ENABLE_3D: 'true',
+      NEXT_PUBLIC_ENABLE_VOICE: 'false',
+
+      // Performance
       NEXT_PUBLIC_CACHE_TTL: 300,
       NEXT_PUBLIC_WS_RECONNECT_INTERVAL: 5000,
     };

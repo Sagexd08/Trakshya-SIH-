@@ -183,72 +183,70 @@ const StoreInitializer = ({ children }: { children: React.ReactNode }) => {
 export default function AppProviders({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => createQueryClient());
 
-  return (
-    <ErrorBoundary>
-      <Provider store={store}>
-        <PersistGate loading={<LoadingScreen />} persistor={persistor}>
-          <StoreInitializer>
-            <QueryClientProvider client={queryClient}>
-              <ThemeProvider
-                attribute="class"
-                defaultTheme="dark"
-                enableSystem
-                disableTransitionOnChange
-              >
-                {config.services.clerk.enabled ? (
-                  <ClerkProvider
-                    publishableKey={config.services.clerk.publishableKey!}
-                    appearance={{
-                      baseTheme: undefined,
-                      variables: {
-                        colorPrimary: '#06b6d4',
-                        colorBackground: '#0a0a0a',
-                        colorInputBackground: '#171717',
-                        colorInputText: '#f5f5f5',
-                      },
-                    }}
-                  >
-                    <ConfigurationStatus>
-                      {children}
-                    </ConfigurationStatus>
-                  </ClerkProvider>
-                ) : (
+  // Simple error boundary wrapper
+  try {
+    return (
+      <ErrorBoundary>
+        <Provider store={store}>
+          <PersistGate loading={<LoadingScreen />} persistor={persistor}>
+            <StoreInitializer>
+              <QueryClientProvider client={queryClient}>
+                <ThemeProvider
+                  attribute="class"
+                  defaultTheme="dark"
+                  enableSystem
+                  disableTransitionOnChange
+                >
+                  {/* Simplified provider structure */}
                   <ConfigurationStatus>
                     {children}
                   </ConfigurationStatus>
-                )}
-                
-                {/* Toast Notifications */}
-                <Toaster
-                  position="top-right"
-                  theme="dark"
-                  richColors
-                  closeButton
-                  duration={5000}
-                  toastOptions={{
-                    style: {
-                      background: '#171717',
-                      border: '1px solid #404040',
-                      color: '#f5f5f5',
-                    },
-                  }}
-                />
-                
-                {/* React Query DevTools */}
-                {isDevelopment() && (
-                  <ReactQueryDevtools
-                    initialIsOpen={false}
-                    position="bottom-right"
-                    buttonPosition="bottom-right"
+
+                  {/* Toast Notifications */}
+                  <Toaster
+                    position="top-right"
+                    theme="dark"
+                    richColors
+                    closeButton
+                    duration={5000}
+                    toastOptions={{
+                      style: {
+                        background: '#171717',
+                        border: '1px solid #404040',
+                        color: '#f5f5f5',
+                      },
+                    }}
                   />
-                )}
-              </ThemeProvider>
-            </QueryClientProvider>
-          </StoreInitializer>
-        </PersistGate>
-      </Provider>
-    </ErrorBoundary>
-  );
+
+                  {/* React Query DevTools */}
+                  {isDevelopment() && (
+                    <ReactQueryDevtools
+                      initialIsOpen={false}
+                      position="bottom-right"
+                      buttonPosition="bottom-right"
+                    />
+                  )}
+                </ThemeProvider>
+              </QueryClientProvider>
+            </StoreInitializer>
+          </PersistGate>
+        </Provider>
+      </ErrorBoundary>
+    );
+  } catch (error) {
+    console.error('AppProviders error:', error);
+    return (
+      <div className="min-h-screen bg-neutral-950 text-neutral-100 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <h1 className="text-2xl font-bold text-red-400">Provider Error</h1>
+          <p className="text-neutral-400">Failed to initialize application providers</p>
+          <pre className="text-xs text-neutral-500 max-w-md overflow-auto">
+            {error instanceof Error ? error.message : 'Unknown error'}
+          </pre>
+        </div>
+      </div>
+    );
+  }
 }
 
 // Performance Monitor Hook
