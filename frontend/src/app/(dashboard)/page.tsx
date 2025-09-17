@@ -1,5 +1,30 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { useAppSelector, useAppDispatch } from "@/store";
+import {
+  selectMetrics,
+  selectTrains,
+  selectConflicts,
+  updateMetrics,
+  setConnectionStatus
+} from "@/store/slices/railwaySlice";
+import {
+  selectLayout,
+  selectTheme,
+  togglePanel,
+  setGlobalLoading,
+  addNotification
+} from "@/store/slices/uiSlice";
+import { selectUser, selectIsDemo } from "@/store/slices/authSlice";
+import {
+  useGetSystemMetricsQuery,
+  useGetTrainsQuery,
+  useGetConflictsQuery,
+  useGetEnergySeriesQuery
+} from "@/store/api/railwayApi";
+
+// Enhanced Components
 import DigitalTwinMap from "@/components/DigitalTwinMap";
 import ConflictHeatmap from "@/components/ConflictHeatmap";
 import EnergyChart from "@/components/EnergyChart";
@@ -8,10 +33,15 @@ import DecisionCard from "@/components/DecisionCard";
 import ScenarioModal from "@/components/ScenarioModal";
 import AIInsightsPanel from "@/components/AIInsightsPanel";
 import AssistantPanel from "@/components/AssistantPanel";
-import { SystemContext } from "@/lib/gemini";
+
+// UI Components
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+
+// Icons
 import {
   Maximize2,
   Minimize2,
@@ -24,145 +54,297 @@ import {
   AlertTriangle,
   Train,
   Clock,
-  Users
+  Users,
+  Wifi,
+  WifiOff,
+  Settings,
+  BarChart3,
+  Map,
+  Brain
 } from "lucide-react";
+
 import { cn } from "@/lib/utils";
-import { motion } from "framer-motion";
+import { config } from "@/config";
 
-interface DashboardMetrics {
-  totalTrains: number;
-  activeConflicts: number;
-  energyEfficiency: number;
-  avgDelay: number;
-  throughput: number;
-  onlineControllers: number;
-}
-
+// Enhanced Dashboard Component
 export default function DashboardPage() {
-  const [metrics, setMetrics] = useState<DashboardMetrics>({
-    totalTrains: 142,
-    activeConflicts: 3,
-    energyEfficiency: 92.4,
-    avgDelay: 4.2,
-    throughput: 87.6,
-    onlineControllers: 12
+  // Redux state
+  const dispatch = useAppDispatch();
+  const metrics = useAppSelector(selectMetrics);
+  const trains = useAppSelector(selectTrains);
+  const conflicts = useAppSelector(selectConflicts);
+  const layout = useAppSelector(selectLayout);
+  const theme = useAppSelector(selectTheme);
+  const user = useAppSelector(selectUser);
+  const isDemo = useAppSelector(selectIsDemo);
+
+  // API queries with real-time updates
+  const {
+    data: systemMetrics,
+    isLoading: metricsLoading,
+    error: metricsError,
+    refetch: refetchMetrics
+  } = useGetSystemMetricsQuery(undefined, {
+    pollingInterval: 30000, // 30 seconds
+    refetchOnFocus: true,
   });
+
+  const {
+    data: trainsData,
+    isLoading: trainsLoading,
+    error: trainsError
+  } = useGetTrainsQuery({
+    limit: 100,
+    status: 'active'
+  }, {
+    pollingInterval: 15000, // 15 seconds
+  });
+
+  const {
+    data: conflictsData,
+    isLoading: conflictsLoading
+  } = useGetConflictsQuery({
+    status: 'active',
+    limit: 50
+  }, {
+    pollingInterval: 10000, // 10 seconds
+  });
+
+  const {
+    data: energyData,
+    isLoading: energyLoading
+  } = useGetEnergySeriesQuery({
+    stations: 'NDLS,CSMT,HWH',
+    hours: 24
+  });
+  // Local state
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [selectedView, setSelectedView] = useState<'overview' | 'detailed'>('overview');
+  const [showScenarioModal, setShowScenarioModal] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'reconnecting'>('connected');
+
+  // Real-time connection monitoring
+  useEffect(() => {
+    const checkConnection = () => {
+      const isOnline = navigator.onLine;
+      const status = isOnline ? 'connected' : 'disconnected';
+      setConnectionStatus(status);
+      dispatch(setConnectionStatus(isOnline));
+    };
+
+    window.addEventListener('online', checkConnection);
+    window.addEventListener('offline', checkConnection);
+    checkConnection();
+
+    return () => {
+      window.removeEventListener('online', checkConnection);
+      window.removeEventListener('offline', checkConnection);
+    };
+  }, [dispatch]);
+
+  // Update metrics when API data changes
+  useEffect(() => {
+    if (systemMetrics) {
+      dispatch(updateMetrics(systemMetrics));
+    }
+  }, [systemMetrics, dispatch]);
+
+  // Error handling
+  useEffect(() => {
+    if (metricsError || trainsError) {
+      dispatch(addNotification({
+        type: 'error',
+        category: 'system',
+        title: 'Data Fetch Error',
+        message: 'Failed to fetch latest data. Using cached information.',
+        persistent: false,
+        priority: 'medium',
+        source: 'dashboard',
+      }));
+    }
+  }, [metricsError, trainsError, dispatch]);
 
   // AI Context for components
-  const aiContext: SystemContext = {
+  const aiContext = {
     activeTrains: metrics.totalTrains,
-    conflicts: [
-      {
-        id: "conflict-1",
-        trainA: "12432",
-        trainB: "12001",
-        severity: "high" as const,
-        predictedTime: new Date(Date.now() + 15 * 60000).toISOString() // 15 minutes from now
-      },
-      {
-        id: "conflict-2",
-        trainA: "18005",
-        trainB: "22691",
-        severity: "medium" as const,
-        predictedTime: new Date(Date.now() + 45 * 60000).toISOString() // 45 minutes from now
-      }
-    ],
+    conflicts: Object.values(conflicts).slice(0, 5), // Get first 5 conflicts
     energyEfficiency: metrics.energyEfficiency,
-    avgDelay: metrics.avgDelay,
+    avgDelay: metrics.averageDelay,
     throughput: metrics.throughput,
-    userRole: 'controller',
+    userRole: user?.role || 'controller',
     currentView: 'dashboard'
   };
 
-  // Simulate real-time metrics updates
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setMetrics(prev => ({
-        totalTrains: Math.max(100, Math.min(200, prev.totalTrains + Math.floor((Math.random() - 0.5) * 6))),
-        activeConflicts: Math.max(0, Math.min(10, prev.activeConflicts + Math.floor((Math.random() - 0.5) * 2))),
-        energyEfficiency: Math.max(85, Math.min(98, prev.energyEfficiency + (Math.random() - 0.5) * 2)),
-        avgDelay: Math.max(0, Math.min(15, prev.avgDelay + (Math.random() - 0.5) * 1)),
-        throughput: Math.max(70, Math.min(100, prev.throughput + (Math.random() - 0.5) * 3)),
-        onlineControllers: Math.max(5, Math.min(25, prev.onlineControllers + Math.floor((Math.random() - 0.5) * 2)))
-      }));
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  const handleRefresh = async () => {
+  // Refresh handler
+  const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setIsRefreshing(false);
-  };
+    dispatch(setGlobalLoading(true));
+
+    try {
+      await Promise.all([
+        refetchMetrics(),
+        // Add other refetch calls as needed
+      ]);
+
+      dispatch(addNotification({
+        type: 'success',
+        category: 'system',
+        title: 'Data Refreshed',
+        message: 'All dashboard data has been updated successfully.',
+        persistent: false,
+        priority: 'low',
+        source: 'dashboard',
+      }));
+    } catch (error) {
+      dispatch(addNotification({
+        type: 'error',
+        category: 'system',
+        title: 'Refresh Failed',
+        message: 'Failed to refresh dashboard data. Please try again.',
+        persistent: false,
+        priority: 'medium',
+        source: 'dashboard',
+      }));
+    } finally {
+      setIsRefreshing(false);
+      dispatch(setGlobalLoading(false));
+    }
+  }, [dispatch, refetchMetrics]);
+
+  // Auto-refresh every 5 minutes
+  useEffect(() => {
+    const interval = setInterval(handleRefresh, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [handleRefresh]);
 
   const toggleCardExpansion = (cardId: string) => {
     setExpandedCard(expandedCard === cardId ? null : cardId);
   };
 
+  // Enhanced metrics cards with loading states and real data
   const metricCards = [
     {
       title: "Active Trains",
-      value: metrics.totalTrains,
+      value: metricsLoading ? "..." : metrics.totalTrains,
       icon: Train,
       color: "text-blue-400",
       bgColor: "bg-blue-500/10",
-      trend: "+2.3%"
+      trend: metrics.trends?.totalTrains || "+2.3%",
+      loading: metricsLoading,
+      description: "Currently operational trains across the network"
     },
     {
-      title: "Conflicts",
-      value: metrics.activeConflicts,
+      title: "Active Conflicts",
+      value: conflictsLoading ? "..." : Object.keys(conflicts).length,
       icon: AlertTriangle,
       color: "text-red-400",
       bgColor: "bg-red-500/10",
-      trend: "-12%"
+      trend: metrics.trends?.conflicts || "-12%",
+      loading: conflictsLoading,
+      description: "Real-time conflict detection and resolution"
     },
     {
       title: "Energy Efficiency",
-      value: `${metrics.energyEfficiency.toFixed(1)}%`,
+      value: energyLoading ? "..." : `${metrics.energyEfficiency.toFixed(1)}%`,
       icon: Zap,
       color: "text-yellow-400",
       bgColor: "bg-yellow-500/10",
-      trend: "+5.2%"
+      trend: metrics.trends?.energyEfficiency || "+5.2%",
+      loading: energyLoading,
+      description: "System-wide energy optimization performance"
     },
     {
       title: "Avg Delay",
-      value: `${metrics.avgDelay.toFixed(1)}m`,
+      value: metricsLoading ? "..." : `${metrics.averageDelay.toFixed(1)}m`,
       icon: Clock,
       color: "text-orange-400",
       bgColor: "bg-orange-500/10",
-      trend: "-8.1%"
+      trend: metrics.trends?.averageDelay || "-8.1%",
+      loading: metricsLoading,
+      description: "Average delay across all train services"
     },
     {
       title: "Throughput",
-      value: `${metrics.throughput.toFixed(1)}%`,
+      value: metricsLoading ? "..." : `${metrics.throughput.toFixed(1)}%`,
       icon: Activity,
       color: "text-green-400",
       bgColor: "bg-green-500/10",
-      trend: "+3.7%"
+      trend: metrics.trends?.throughput || "+3.7%",
+      loading: metricsLoading,
+      description: "Network capacity utilization efficiency"
     },
     {
-      title: "Controllers",
-      value: metrics.onlineControllers,
+      title: "Online Controllers",
+      value: metricsLoading ? "..." : metrics.onlineControllers,
       icon: Users,
       color: "text-purple-400",
       bgColor: "bg-purple-500/10",
-      trend: "+1"
+      trend: "+1",
+      loading: metricsLoading,
+      description: "Active control room operators"
     }
   ];
 
   return (
     <div className="space-y-6">
-      {/* Header with Actions */}
+      {/* Enhanced Header with Status and Actions */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Control Center Dashboard</h1>
-          <p className="text-neutral-400">Real-time monitoring and AI-powered optimization</p>
+        <div className="space-y-2">
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-white">Railway Operations Dashboard</h1>
+            <div className="flex items-center gap-2">
+              {connectionStatus === 'connected' ? (
+                <div className="flex items-center gap-1 text-green-400">
+                  <Wifi className="h-4 w-4" />
+                  <span className="text-xs">Live</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1 text-red-400">
+                  <WifiOff className="h-4 w-4" />
+                  <span className="text-xs">Offline</span>
+                </div>
+              )}
+              {isDemo && (
+                <Badge variant="outline" className="text-amber-400 border-amber-400/30">
+                  Demo Mode
+                </Badge>
+              )}
+            </div>
+          </div>
+          <p className="text-neutral-400">
+            Real-time monitoring and AI-powered optimization • Last updated: {new Date().toLocaleTimeString()}
+          </p>
         </div>
-        <div className="flex items-center gap-2">
+
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSelectedView(selectedView === 'overview' ? 'detailed' : 'overview')}
+              className="text-neutral-400 hover:text-neutral-100"
+            >
+              {selectedView === 'overview' ? <BarChart3 className="h-4 w-4" /> : <Map className="h-4 w-4" />}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-neutral-400 hover:text-neutral-100"
+            >
+              <Brain className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-neutral-400 hover:text-neutral-100"
+            >
+              <Settings className="h-4 w-4" />
+            </Button>
+          </div>
+
+          <div className="h-6 w-px bg-neutral-700" />
+
           <Button
             variant="outline"
             size="sm"
@@ -177,10 +359,17 @@ export default function DashboardPage() {
             <Download size={16} className="mr-2" />
             Export
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowScenarioModal(true)}
+          >
+            Run Scenario
+          </Button>
         </div>
       </div>
 
-      {/* Metrics Overview */}
+      {/* Enhanced Metrics Overview */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         {metricCards.map((metric, index) => (
           <motion.div
@@ -188,30 +377,67 @@ export default function DashboardPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.1 }}
+            whileHover={{ scale: 1.02 }}
+            className="group"
           >
-            <Card className="bg-neutral-900/50 border-neutral-800 hover:bg-neutral-900/80 transition-colors">
+            <Card className="bg-neutral-900/50 border-neutral-800 hover:bg-neutral-900/80 transition-all duration-200 group-hover:border-neutral-700">
               <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className={cn("p-2 rounded-lg", metric.bgColor)}>
-                    <metric.icon size={20} className={metric.color} />
-                  </div>
-                  <div className="text-right">
-                    <div className="text-2xl font-bold text-white">{metric.value}</div>
-                    <div className="text-xs text-neutral-400">{metric.title}</div>
-                    <div className={cn(
-                      "text-xs flex items-center gap-1 mt-1",
-                      metric.trend.startsWith('+') ? "text-green-400" : "text-red-400"
-                    )}>
-                      {metric.trend.startsWith('+') ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
-                      {metric.trend}
+                {metric.loading ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Skeleton className="h-9 w-9 rounded-lg" />
+                      <Skeleton className="h-5 w-12" />
+                    </div>
+                    <div className="space-y-2">
+                      <Skeleton className="h-6 w-16" />
+                      <Skeleton className="h-4 w-20" />
                     </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <div className={cn("p-2 rounded-lg transition-colors", metric.bgColor)}>
+                      <metric.icon size={20} className={metric.color} />
+                    </div>
+                    <div className="text-right">
+                      <div className="text-2xl font-bold text-white group-hover:text-cyan-400 transition-colors">
+                        {metric.value}
+                      </div>
+                      <div className="text-xs text-neutral-400 group-hover:text-neutral-300 transition-colors">
+                        {metric.title}
+                      </div>
+                      <div className={cn(
+                        "text-xs flex items-center gap-1 mt-1 transition-colors",
+                        metric.trend.startsWith('+') ? "text-green-400" : "text-red-400"
+                      )}>
+                        {metric.trend.startsWith('+') ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
+                        {metric.trend}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </motion.div>
         ))}
       </div>
+
+      {/* Error States */}
+      <AnimatePresence>
+        {(metricsError || trainsError) && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+          >
+            <Alert className="border-red-500/20 bg-red-500/10">
+              <AlertTriangle className="h-4 w-4 text-red-400" />
+              <AlertDescription className="text-red-300">
+                Some data may be outdated due to connection issues. Using cached information where available.
+              </AlertDescription>
+            </Alert>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Main Dashboard Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
