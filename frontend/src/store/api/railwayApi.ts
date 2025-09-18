@@ -256,8 +256,7 @@ export const railwayApi = createApi({
     subscribeToUpdates: builder.query<any, void>({
       query: () => '/railway/subscribe',
       // This would typically be a WebSocket connection
-      // For now, we'll use polling
-      pollingInterval: 5000, // 5 seconds
+      // For now, consumers should use the hook option: useSubscribeToUpdatesQuery(undefined, { pollingInterval: 5000 })
     }),
   }),
 });

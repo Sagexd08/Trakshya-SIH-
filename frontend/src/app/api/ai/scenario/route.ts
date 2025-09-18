@@ -125,7 +125,7 @@ export async function POST(request: NextRequest) {
 }
 
 // GET endpoint for saved scenarios
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
     // Authenticate user using the same method as POST
     const { userId } = await getAuthenticatedUser();

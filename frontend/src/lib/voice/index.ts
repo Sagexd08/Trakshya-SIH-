@@ -2,6 +2,15 @@ import { useCallback, useEffect, useState, useRef } from 'react';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 
+
+// Extend Window typing for Web Speech API across browsers
+declare global {
+  interface Window {
+    SpeechRecognition?: any;
+    webkitSpeechRecognition?: any;
+  }
+}
+
 export interface VoiceCommand {
   pattern: RegExp;
   action: string;
@@ -23,7 +32,7 @@ export interface VoiceSettings {
 
 export class VoiceManager {
   private static instance: VoiceManager;
-  private recognition: SpeechRecognition | null = null;
+  private recognition: any | null = null;
   private synthesis: SpeechSynthesis | null = null;
   private isListening = false;
   private commands: VoiceCommand[] = [];
@@ -60,7 +69,7 @@ export class VoiceManager {
     if (typeof window === 'undefined') return;
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    
+
     if (!SpeechRecognition) {
       console.warn('Speech recognition not supported in this browser');
       return;
@@ -82,19 +91,19 @@ export class VoiceManager {
       this.onEnd?.();
     };
 
-    this.recognition.onresult = (event) => {
+    this.recognition.onresult = (event: any) => {
       const result = event.results[event.results.length - 1];
       const transcript = result[0].transcript.trim();
       const confidence = result[0].confidence;
 
       this.onResult?.(transcript, confidence);
-      
+
       if (result.isFinal) {
         this.processCommand(transcript);
       }
     };
 
-    this.recognition.onerror = (event) => {
+    this.recognition.onerror = (event: any) => {
       const error = `Speech recognition error: ${event.error}`;
       console.error(error);
       this.onError?.(error);
@@ -105,7 +114,7 @@ export class VoiceManager {
     if (typeof window === 'undefined') return;
 
     this.synthesis = window.speechSynthesis;
-    
+
     if (!this.synthesis) {
       console.warn('Speech synthesis not supported in this browser');
     }
@@ -147,7 +156,7 @@ export class VoiceManager {
 
   private processCommand(transcript: string) {
     const normalizedTranscript = transcript.toLowerCase().trim();
-    
+
     for (const command of this.commands) {
       const matches = normalizedTranscript.match(command.pattern);
       if (matches) {
@@ -213,7 +222,7 @@ export class VoiceManager {
     utterance.volume = options.volume ?? this.settings.volume;
     utterance.rate = options.rate ?? this.settings.rate;
     utterance.pitch = options.pitch ?? this.settings.pitch;
-    
+
     if (options.voice || this.settings.voice) {
       utterance.voice = options.voice || this.settings.voice!;
     }
@@ -264,7 +273,7 @@ export function useVoiceInteraction() {
   const [transcript, setTranscript] = useState('');
   const [confidence, setConfidence] = useState(0);
   const [isSupported, setIsSupported] = useState(false);
-  const voiceManager = useRef<VoiceManager>();
+  const voiceManager = useRef<VoiceManager | null>(null);
 
   useEffect(() => {
     voiceManager.current = VoiceManager.getInstance();
@@ -407,44 +416,5 @@ export function useVoiceInteraction() {
   };
 }
 
-// Voice command suggestions component
-export function VoiceCommandHelp() {
-  const { t } = useTranslation();
-  
-  const commands = [
-    {
-      command: t('voice-commands.show-conflicts', { region: 'North Zone' }),
-      description: 'Show conflicts in a specific region'
-    },
-    {
-      command: t('voice-commands.train-status', { trainId: '12345' }),
-      description: 'Get status of a specific train'
-    },
-    {
-      command: t('voice-commands.energy-report'),
-      description: 'Generate energy efficiency report'
-    },
-    {
-      command: t('voice-commands.run-scenario', { scenario: 'fog' }),
-      description: 'Run a scenario simulation'
-    },
-    {
-      command: t('voice-commands.optimize-route', { trainId: '12345' }),
-      description: 'Optimize route for a train'
-    }
-  ];
-
-  return (
-    <div className="space-y-2">
-      <h3 className="text-sm font-medium text-neutral-300">Voice Commands</h3>
-      <div className="space-y-1">
-        {commands.map((cmd, index) => (
-          <div key={index} className="text-xs">
-            <div className="text-cyan-400 font-mono">"{cmd.command}"</div>
-            <div className="text-neutral-500">{cmd.description}</div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
+// React component moved to TSX to avoid JSX-in-TS parsing issues
+export { VoiceCommandHelp } from './VoiceCommandHelp';

@@ -13,7 +13,7 @@ export async function getCurrentUserId(): Promise<string | null> {
 
   try {
     const { auth } = await import('@clerk/nextjs/server');
-    const { userId } = auth();
+    const { userId } = await auth();
     return userId ?? null;
   } catch {
     return null;

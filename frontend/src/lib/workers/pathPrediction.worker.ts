@@ -74,7 +74,11 @@ function calculateBearing(lat1: number, lng1: number, lat2: number, lng2: number
 }
 
 // Predict train position at future time
-function predictPosition(train: TrainData, futureTime: number, options: any = {}): {
+function predictPosition(
+  train: TrainData,
+  futureTime: number,
+  options: PredictionRequest['options'] = {}
+): {
   position: { lat: number; lng: number };
   speed: number;
   confidence: number;
@@ -100,22 +104,24 @@ function predictPosition(train: TrainData, futureTime: number, options: any = {}
   let adjustedSpeed = train.speed;
   
   if (options.weatherConditions) {
-    const weatherMultipliers = {
+    const weatherMultipliers: Record<'clear' | 'fog' | 'rain' | 'snow', number> = {
       clear: 1.0,
       fog: 0.7,
       rain: 0.8,
       snow: 0.6,
     };
-    adjustedSpeed *= weatherMultipliers[options.weatherConditions] || 1.0;
+    const key = options.weatherConditions ?? 'clear';
+    adjustedSpeed *= weatherMultipliers[key];
   }
 
   if (options.trackConditions) {
-    const trackMultipliers = {
+    const trackMultipliers: Record<'normal' | 'maintenance' | 'congested', number> = {
       normal: 1.0,
       maintenance: 0.5,
       congested: 0.3,
     };
-    adjustedSpeed *= trackMultipliers[options.trackConditions] || 1.0;
+    const key2 = options.trackConditions ?? 'normal';
+    adjustedSpeed *= trackMultipliers[key2];
   }
 
   // Account for delays
@@ -158,8 +164,8 @@ function predictPosition(train: TrainData, futureTime: number, options: any = {}
   // Calculate confidence based on time horizon and factors
   let confidence = Math.max(0.1, 1.0 - (timeDelta / 60)); // Decreases over time
   
-  if (options.weatherConditions !== 'clear') confidence *= 0.8;
-  if (options.trackConditions !== 'normal') confidence *= 0.7;
+  if (options.weatherConditions && options.weatherConditions !== 'clear') confidence *= 0.8;
+  if (options.trackConditions && options.trackConditions !== 'normal') confidence *= 0.7;
   if (train.delay > 10) confidence *= 0.9;
 
   // Calculate ETA to next station
@@ -359,5 +365,3 @@ self.onmessage = function(e: MessageEvent<PredictionRequest>) {
   }
 };
 
-// Export types for TypeScript
-export type { PredictionRequest, PredictionResult, TrainData };

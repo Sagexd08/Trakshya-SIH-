@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { createSupabaseBrowser } from '@/lib/supabase/client';
 import { useUser } from '@clerk/nextjs';
 import { useCallback, useEffect, useState } from 'react';
 
@@ -106,8 +106,8 @@ export class CryptoUtils {
   }
 
   // Utility functions
-  private static arrayBufferToBase64(buffer: ArrayBuffer): string {
-    const bytes = new Uint8Array(buffer);
+  private static arrayBufferToBase64(buffer: ArrayBuffer | Uint8Array): string {
+    const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
     let binary = '';
     for (let i = 0; i < bytes.byteLength; i++) {
       binary += String.fromCharCode(bytes[i]);
@@ -285,10 +285,7 @@ export class SessionManager {
 
 // Audit logging
 export class AuditLogger {
-  private static supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+  private static supabase = createSupabaseBrowser();
 
   static async log(action: string, details: any, userId?: string) {
     try {
@@ -337,10 +334,7 @@ export function useSecurityContext() {
 
   const fetchUserPermissions = async (userId: string) => {
     try {
-      const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-      );
+      const supabase = createSupabaseBrowser();
 
       const { data, error } = await supabase
         .from('profiles')

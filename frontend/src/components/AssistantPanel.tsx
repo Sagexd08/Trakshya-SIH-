@@ -53,7 +53,7 @@ export default function AssistantPanel({ context, onRecommendationApply }: Assis
   const [isOnline, setIsOnline] = useState(true);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const recognitionRef = useRef<any>(null);
   const synthRef = useRef<SpeechSynthesis | null>(null);
 
   // Auto-scroll to bottom when new messages arrive
@@ -64,13 +64,13 @@ export default function AssistantPanel({ context, onRecommendationApply }: Assis
   // Initialize speech recognition
   useEffect(() => {
     if (typeof window !== 'undefined' && 'webkitSpeechRecognition' in window) {
-      const SpeechRecognition = window.webkitSpeechRecognition || window.SpeechRecognition;
-      recognitionRef.current = new SpeechRecognition();
+      const SpeechRecognitionCtor = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
+      recognitionRef.current = new SpeechRecognitionCtor();
       recognitionRef.current.continuous = false;
       recognitionRef.current.interimResults = false;
       recognitionRef.current.lang = 'en-US';
 
-      recognitionRef.current.onresult = (event) => {
+      recognitionRef.current.onresult = (event: any) => {
         const transcript = event.results[0][0].transcript;
         setInput(transcript);
         setIsListening(false);
@@ -156,7 +156,6 @@ export default function AssistantPanel({ context, onRecommendationApply }: Assis
         content: `I understand you're asking about "${currentInput}". I'm currently in offline mode, but based on typical railway operations, I recommend checking the conflict heatmap and monitoring train delays. Please ensure your internet connection is stable for full AI capabilities.`,
         timestamp: new Date(),
         metadata: {
-          recommendations: ['offline-mode'],
           actions: ['check-connection']
         }
       };

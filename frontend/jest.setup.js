@@ -1,4 +1,6 @@
 import '@testing-library/jest-dom'
+import 'whatwg-fetch'
+
 
 // Mock Next.js router
 jest.mock('next/router', () => ({
@@ -203,7 +205,8 @@ jest.mock('three', () => ({
   WebGLRenderer: jest.fn(() => ({
     setSize: jest.fn(),
     render: jest.fn(),
-    domElement: document.createElement('canvas'),
+    // Minimal mock without referencing out-of-scope globals
+    domElement: { getContext: jest.fn() },
   })),
   Mesh: jest.fn(),
   BoxGeometry: jest.fn(),

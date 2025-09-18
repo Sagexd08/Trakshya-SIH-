@@ -17,9 +17,9 @@ export async function GET(request: NextRequest) {
     
     // Fallback to connection remote address
     if (!clientIp) {
-      clientIp = request.ip || 'unknown';
+      clientIp = 'unknown';
     }
-    
+
     return NextResponse.json({
       ip: clientIp,
       headers: {

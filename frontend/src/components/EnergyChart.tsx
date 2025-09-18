@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef } from "react";
 import {
   LineChart,
   Line,
@@ -15,12 +15,12 @@ import {
   ReferenceLine,
   Brush,
   CartesianGrid,
-  Cell
+
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
 import { Slider } from "@/components/ui/slider";
 import {
   Zap,
@@ -34,7 +34,7 @@ import {
   LineChart as LineChartIcon,
   Activity
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+
 import { useRealtimeData } from "@/lib/hooks/useRealtimeData";
 import { toast } from "sonner";
 
@@ -102,7 +102,7 @@ export default function EnergyChart() {
   });
 
   const [isPlaying, setIsPlaying] = useState(false);
-  const [selectedMetric, setSelectedMetric] = useState<'consumption' | 'efficiency' | 'savings'>('consumption');
+
 
   // Generate mock data if no real data available
   const generateMockData = useCallback((): EnergyDataPoint[] => {
@@ -210,7 +210,7 @@ export default function EnergyChart() {
         // For PDF, we would typically use a library like jsPDF
         toast.info('PDF export feature coming soon');
       }
-    } catch (error) {
+    } catch {
       toast.error('Export failed');
     }
   }, [filteredData]);
@@ -247,7 +247,7 @@ export default function EnergyChart() {
           y={chartConfig.thresholds.efficiency}
           stroke="#fbbf24"
           strokeDasharray="5 5"
-          label={{ value: "Efficiency Target", position: "topRight", fill: "#fbbf24" }}
+          label={{ value: "Efficiency Target", position: "top", fill: "#fbbf24" }}
         />
 
         {/* Brush for zooming */}

@@ -15,8 +15,8 @@ const envSchema = z.object({
 
   // API Configuration
   NEXT_PUBLIC_API_BASE: z.string().url().optional(),
-  API_RATE_LIMIT: z.string().transform(Number).default('100'),
-  API_TIMEOUT: z.string().transform(Number).default('30000'),
+  API_RATE_LIMIT: z.coerce.number().default(100),
+  API_TIMEOUT: z.coerce.number().default(30000),
 
   // External Services
   NEXT_PUBLIC_MAPBOX_TOKEN: z.string().optional(),
@@ -38,14 +38,14 @@ const envSchema = z.object({
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
 
   // Feature Flags
-  NEXT_PUBLIC_ENABLE_AI: z.string().transform(Boolean).default('true'),
-  NEXT_PUBLIC_ENABLE_REALTIME: z.string().transform(Boolean).default('true'),
-  NEXT_PUBLIC_ENABLE_3D: z.string().transform(Boolean).default('true'),
-  NEXT_PUBLIC_ENABLE_VOICE: z.string().transform(Boolean).default('false'),
+  NEXT_PUBLIC_ENABLE_AI: z.coerce.boolean().default(true),
+  NEXT_PUBLIC_ENABLE_REALTIME: z.coerce.boolean().default(true),
+  NEXT_PUBLIC_ENABLE_3D: z.coerce.boolean().default(true),
+  NEXT_PUBLIC_ENABLE_VOICE: z.coerce.boolean().default(false),
 
   // Performance
-  NEXT_PUBLIC_CACHE_TTL: z.string().transform(Number).default('300'),
-  NEXT_PUBLIC_WS_RECONNECT_INTERVAL: z.string().transform(Number).default('5000'),
+  NEXT_PUBLIC_CACHE_TTL: z.coerce.number().default(300),
+  NEXT_PUBLIC_WS_RECONNECT_INTERVAL: z.coerce.number().default(5000),
 });
 
 // Parse and validate environment variables

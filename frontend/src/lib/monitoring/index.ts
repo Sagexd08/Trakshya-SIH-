@@ -97,8 +97,8 @@ class PerformanceMonitor {
   private handleNavigationEntry(entry: PerformanceNavigationTiming) {
     this.metrics = {
       ...this.metrics,
-      pageLoadTime: entry.loadEventEnd - entry.navigationStart,
-      timeToInteractive: entry.domInteractive - entry.navigationStart,
+      pageLoadTime: entry.loadEventEnd - entry.startTime,
+      timeToInteractive: entry.domInteractive - entry.startTime,
       totalBlockingTime: entry.domContentLoadedEventEnd - entry.domContentLoadedEventStart,
     } as PerformanceMetrics;
   }
@@ -362,11 +362,7 @@ export function initializeMonitoring() {
     environment: process.env.NODE_ENV,
     tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
     debug: process.env.NODE_ENV === 'development',
-    integrations: [
-      new Sentry.BrowserTracing({
-        tracingOrigins: ['localhost', /^\/api/],
-      }),
-    ],
+    integrations: [],
   });
 
   // Initialize performance monitoring

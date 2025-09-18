@@ -149,8 +149,10 @@ export default function NotificationCenter({ isOpen, onClose }: NotificationCent
   };
 
   const getNotificationIcon = (notification: any) => {
-    const TypeIcon = notificationIcons[notification.type];
-    const CategoryIcon = categoryIcons[notification.category];
+    const typeKey = (notification?.type ?? 'info') as keyof typeof notificationIcons;
+    const categoryKey = (notification?.category ?? 'system') as keyof typeof categoryIcons;
+    const TypeIcon = notificationIcons[typeKey];
+    const CategoryIcon = categoryIcons[categoryKey];
     return TypeIcon || CategoryIcon || Info;
   };
 
@@ -249,7 +251,7 @@ export default function NotificationCenter({ isOpen, onClose }: NotificationCent
                           )}>
                             <Icon className={cn(
                               "h-4 w-4",
-                              typeColors[notification.type]
+                              typeColors[(notification.type as keyof typeof typeColors) ?? 'info']
                             )} />
                           </div>
                           

@@ -222,7 +222,6 @@ export default function AppProviders({ children }: { children: React.ReactNode }
                   {isDevelopment() && (
                     <ReactQueryDevtools
                       initialIsOpen={false}
-                      position="bottom-right"
                       buttonPosition="bottom-right"
                     />
                   )}
@@ -258,9 +257,10 @@ export const usePerformanceMonitor = () => {
       const entries = list.getEntries();
       entries.forEach((entry) => {
         if (entry.entryType === 'navigation') {
+          const nav = entry as PerformanceNavigationTiming;
           console.log('Navigation Performance:', {
-            loadTime: entry.loadEventEnd - entry.loadEventStart,
-            domContentLoaded: entry.domContentLoadedEventEnd - entry.domContentLoadedEventStart,
+            loadTime: nav.loadEventEnd - nav.loadEventStart,
+            domContentLoaded: nav.domContentLoadedEventEnd - nav.domContentLoadedEventStart,
             firstPaint: performance.getEntriesByType('paint')[0]?.startTime,
           });
         }

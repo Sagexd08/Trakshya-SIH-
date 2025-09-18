@@ -222,7 +222,7 @@ export function useOptimizedAnimation(
   animationFn: () => void,
   dependencies: any[] = []
 ) {
-  const rafRef = useRef<number>();
+  const rafRef = useRef<number | null>(null);
   const isRunning = useRef(false);
 
   const start = useCallback(() => {
@@ -265,8 +265,10 @@ export class MemoryManager {
   static set(key: string, value: any, ttl?: number) {
     // Implement LRU cache
     if (this.cache.size >= this.maxCacheSize) {
-      const firstKey = this.cache.keys().next().value;
-      this.cache.delete(firstKey);
+      const firstKey = this.cache.keys().next().value as string | undefined;
+      if (firstKey !== undefined) {
+        this.cache.delete(firstKey);
+      }
     }
 
     const item = {

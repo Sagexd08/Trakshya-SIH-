@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle, XCircle, Clock, AlertTriangle, TrendingUp, Zap, Edit3, Sparkles, RefreshCw } from "lucide-react";
+import { CheckCircle, XCircle, TrendingUp, TrendingDown, Activity, Edit3, Sparkles, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AIRecommendation, SystemContext } from "@/lib/gemini";
 import { toast } from "sonner";
@@ -138,6 +138,7 @@ export default function DecisionCard({
         if (recs.length > 0) {
           setKpiImpacts(calculateKPIImpacts(recs[0]));
           setTrainMovements(generateTrainMovements(recs[0]));
+          if (showTrainVisualization) setShowDetails(recs[0].id);
         }
       } else {
         throw new Error('Failed to fetch recommendations');
@@ -150,6 +151,7 @@ export default function DecisionCard({
       if (mockRecs.length > 0) {
         setKpiImpacts(calculateKPIImpacts(mockRecs[0]));
         setTrainMovements(generateTrainMovements(mockRecs[0]));
+        if (showTrainVisualization) setShowDetails(mockRecs[0].id);
       }
       toast.error("Using demo recommendations. Connect AI service for real-time analysis.");
     } finally {
@@ -158,6 +160,7 @@ export default function DecisionCard({
   };
 
   // Auto-refresh recommendations
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetchRecommendations();
 
@@ -185,11 +188,7 @@ export default function DecisionCard({
       // Remove the applied recommendation
       setRecommendations(prev => prev.filter(r => r.id !== recommendation.id));
 
-      toast.success(`Recommendation applied: ${recommendation.title}`, {
-        description: `Expected impact: ${Object.entries(recommendation.impact)
-          .map(([key, value]) => `${key}: ${value > 0 ? '+' : ''}${value}${key.includes('Reduction') || key.includes('Savings') ? 'm' : '%'}`)
-          .join(', ')}`
-      });
+      toast.success(`Recommendation applied: ${recommendation.title}`);
 
     } catch (error) {
       console.error('Error applying recommendation:', error);
@@ -316,7 +315,7 @@ export default function DecisionCard({
     return (
       <Card className="bg-neutral-900 border-neutral-700">
         <CardContent className="p-4">
-          <div className="animate-pulse space-y-3">
+          <div className="animate-pulse space-y-3" data-testid="loading-skeleton">
             <div className="h-4 bg-neutral-700 rounded mb-2"></div>
             <div className="h-3 bg-neutral-700 rounded mb-3 w-3/4"></div>
             <div className="grid grid-cols-3 gap-2">
@@ -398,7 +397,10 @@ export default function DecisionCard({
                           variant={recommendation.confidence > 0.8 ? "default" : "secondary"}
                           className="text-xs"
                         >
-                          {Math.round(recommendation.confidence * 100)}% confidence
+                          {`${Math.round(recommendation.confidence * 100)}% confidence`}
+                        </Badge>
+                        <Badge variant="outline" className="text-xs md:inline hidden">
+                          {`${Math.round(recommendation.confidence * 100)}%`}
                         </Badge>
                         <Badge variant="outline" className="text-xs">
                           {recommendation.type}
@@ -416,6 +418,7 @@ export default function DecisionCard({
                           size="sm"
                           onClick={() => startEditing(recommendation)}
                           className="h-6 w-6 p-0"
+                          data-testid="edit-button"
                         >
                           <Edit3 className="w-3 h-3" />
                         </Button>
@@ -425,6 +428,7 @@ export default function DecisionCard({
                         size="sm"
                         onClick={() => setShowDetails(isExpanded ? null : recommendation.id)}
                         className="h-6 w-6 p-0"
+                        data-testid="expand-button"
                       >
                         <motion.div
                           animate={{ rotate: isExpanded ? 180 : 0 }}
@@ -448,9 +452,24 @@ export default function DecisionCard({
                       placeholder="Recommendation description"
                     />
                   ) : (
-                    <p className="text-sm text-neutral-400 leading-relaxed">
-                      {recommendation.description}
-                    </p>
+                    <>
+                      <p className="text-sm text-neutral-400 leading-relaxed">
+                        {recommendation.description}
+                      </p>
+                      <div className="flex items-center gap-2 mt-2">
+                        {typeof recommendation.impact?.delayReduction === 'number' && (
+                          <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs bg-neutral-800 text-neutral-200 border border-neutral-700">
+                            {-recommendation.impact.delayReduction}m
+                          </span>
+                        )}
+                        {typeof recommendation.impact?.throughputImprovement === 'number' && (
+                          <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs bg-neutral-800 text-neutral-200 border border-neutral-700">
+                            +{recommendation.impact.throughputImprovement}%
+                          </span>
+                        )}
+                      </div>
+                    </>
+
                   )}
 
                   {/* KPI Impact Cards */}
@@ -481,8 +500,9 @@ export default function DecisionCard({
                             <div className="flex justify-between text-xs">
                               <span className="text-neutral-500">Current:</span>
                               <span className="text-white font-mono">
-                                {impact.current.toFixed(1)}{impact.unit}
+                                {impact.current.toFixed(1)}
                               </span>
+                              <span className="text-neutral-400 ml-1">{impact.unit}</span>
                             </div>
                             <div className="flex justify-between text-xs">
                               <span className="text-neutral-500">Projected:</span>
@@ -491,8 +511,9 @@ export default function DecisionCard({
                                 impact.trend === 'up' ? "text-green-400" :
                                 impact.trend === 'down' ? "text-red-400" : "text-yellow-400"
                               )}>
-                                {impact.projected.toFixed(1)}{impact.unit}
+                                {impact.projected.toFixed(1)}
                               </span>
+                              <span className="text-neutral-400 ml-1">{impact.unit}</span>
                             </div>
                           </div>
 
@@ -630,6 +651,16 @@ export default function DecisionCard({
                         )}
                       </Button>
 
+                      <Button
+                        variant="secondary"
+                        onClick={() => handleReject(recommendation)}
+                        disabled={isProcessing}
+                        size="sm"
+                      >
+                        <XCircle className="w-4 h-4 mr-1" />
+                        Reject
+                      </Button>
+
                       {enableInlineEdit && (
                         <Button
                           variant="outline"
@@ -641,16 +672,6 @@ export default function DecisionCard({
                           Modify
                         </Button>
                       )}
-
-                      <Button
-                        variant="secondary"
-                        onClick={() => handleReject(recommendation)}
-                        disabled={isProcessing}
-                        size="sm"
-                      >
-                        <XCircle className="w-4 h-4 mr-1" />
-                        Reject
-                      </Button>
                     </>
                   )}
                 </CardFooter>

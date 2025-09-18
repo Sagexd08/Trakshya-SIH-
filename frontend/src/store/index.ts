@@ -87,11 +87,6 @@ export const useAppSelector: TypedUseSelectorHook<RootState> = useSelector;
 // Store utilities
 export const getStoreState = () => store.getState();
 
-// Hot module replacement for reducers in development
-if (isDevelopment() && typeof module !== 'undefined' && module.hot) {
-  // Hot reloading is handled by Next.js automatically
-  console.log('🔥 Hot module replacement enabled');
-}
 
 // Store health check
 export const validateStore = () => {

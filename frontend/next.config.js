@@ -51,6 +51,10 @@ const nextConfig = {
             key: 'Permissions-Policy',
             value: 'camera=(), microphone=(), geolocation=()',
           },
+          {
+            key: 'Content-Security-Policy',
+            value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://vercel.live https://cdn.vercel-insights.com https://js.sentry-cdn.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https://api.mapbox.com https://tiles.mapbox.com; connect-src 'self' https://api.mapbox.com https://tiles.mapbox.com https://*.supabase.co https://*.supabase.in https://o*.ingest.sentry.io; font-src 'self' https://fonts.gstatic.com; worker-src 'self' blob:; frame-ancestors 'none'; object-src 'none'",
+          },
           // Performance headers
           {
             key: 'X-DNS-Prefetch-Control',
@@ -217,13 +221,22 @@ const nextConfig = {
 // Sentry configuration
 const sentryWebpackPluginOptions = {
   // Additional config options for the Sentry Webpack plugin
-  silent: true,
+  // Only print logs for uploading source maps in CI
+  silent: !process.env.CI,
   org: process.env.SENTRY_ORG,
   project: process.env.SENTRY_PROJECT,
   authToken: process.env.SENTRY_AUTH_TOKEN,
+  // Wizard-recommended options
+  widenClientFileUpload: true,
+  tunnelRoute: "/monitoring",
+  disableLogger: true,
+  automaticVercelMonitors: true,
 };
 
 // Export configuration with Sentry if available
 module.exports = process.env.SENTRY_DSN
   ? withSentryConfig(nextConfig, sentryWebpackPluginOptions)
   : nextConfig;
+
+
+

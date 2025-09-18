@@ -24,6 +24,12 @@ export interface VirtualizedListProps<T> {
   stickyHeaders?: boolean;
 }
 
+// Discriminated union for internal list items
+type ListEntry<T> =
+  | { type: 'header'; data: string }
+  | { type: 'item'; data: T; originalIndex?: number };
+
+
 export interface VirtualizedTrainListProps {
   trains: Array<{
     id: string;
@@ -96,7 +102,7 @@ export function VirtualizedList<T>({
     }, {} as Record<string, Array<{ item: T; originalIndex: number }>>);
 
     // Flatten groups with headers
-    const flattened: Array<{ type: 'header' | 'item'; data: any; originalIndex?: number }> = [];
+    const flattened: Array<ListEntry<T>> = [];
     Object.entries(groups).forEach(([groupKey, groupItems]) => {
       flattened.push({ type: 'header', data: groupKey });
       groupItems.forEach(({ item, originalIndex }) => {
@@ -107,7 +113,9 @@ export function VirtualizedList<T>({
     return flattened;
   }, [processedItems, groupBy]);
 
-  const finalItems = groupBy ? groupedItems : processedItems.map(item => ({ type: 'item' as const, data: item }));
+  const finalItems: Array<ListEntry<T>> = groupBy
+    ? (groupedItems as Array<ListEntry<T>>)
+    : processedItems.map(item => ({ type: 'item', data: item }));
 
   // Virtualization
   const virtualizer = useVirtualizer({
@@ -194,9 +202,9 @@ export function VirtualizedList<T>({
             return (
               <motion.div
                 key={virtualItem.key}
-                initial={enableAnimation ? { opacity: 0, y: 20 } : false}
+                initial={enableAnimation ? { opacity: 0, y: 20 } : undefined}
                 animate={{ opacity: 1, y: 0 }}
-                exit={enableAnimation ? { opacity: 0, y: -20 } : false}
+                exit={enableAnimation ? { opacity: 0, y: -20 } : undefined}
                 transition={{ duration: 0.2, delay: virtualItem.index * 0.01 }}
                 style={{
                   position: 'absolute',
@@ -249,9 +257,9 @@ export function VirtualizedTrainList({
     const matchesSearch = train.name.toLowerCase().includes(query.toLowerCase()) ||
                          train.id.toLowerCase().includes(query.toLowerCase()) ||
                          train.route.toLowerCase().includes(query.toLowerCase());
-    
+
     const matchesStatus = statusFilter.length === 0 || statusFilter.includes(train.status);
-    
+
     return matchesSearch && matchesStatus;
   }, [statusFilter]);
 
@@ -260,11 +268,11 @@ export function VirtualizedTrainList({
     const statusPriority = { delayed: 0, 'on-time': 1, cancelled: 2 };
     const aPriority = statusPriority[a.status as keyof typeof statusPriority];
     const bPriority = statusPriority[b.status as keyof typeof statusPriority];
-    
+
     if (aPriority !== bPriority) {
       return aPriority - bPriority;
     }
-    
+
     // Then sort by delay (highest first)
     return b.delay - a.delay;
   }, []);
@@ -297,7 +305,7 @@ export function VirtualizedTrainList({
                 train.status === 'delayed' ? 'bg-red-400' : 'bg-gray-400'
               )} />
             </div>
-            
+
             <div className="flex-1 min-w-0">
               <div className="flex items-center space-x-2">
                 <h3 className="text-sm font-medium text-white truncate">
@@ -305,7 +313,7 @@ export function VirtualizedTrainList({
                 </h3>
                 <span className="text-xs text-neutral-500">#{train.id}</span>
               </div>
-              
+
               <div className="flex items-center space-x-4 mt-1">
                 <span className="text-xs text-neutral-400 truncate">
                   {train.route}
@@ -317,10 +325,10 @@ export function VirtualizedTrainList({
             </div>
           </div>
         </div>
-        
+
         <div className="flex items-center space-x-4 flex-shrink-0">
           <div className="text-right">
-            <div className={cn("text-xs font-medium", statusColors[train.status])}>
+            <div className={cn("text-xs font-medium", statusColors[(train.status as keyof typeof statusColors)])}>
               {train.status.replace('-', ' ').toUpperCase()}
             </div>
             {train.delay > 0 && (
@@ -329,7 +337,7 @@ export function VirtualizedTrainList({
               </div>
             )}
           </div>
-          
+
           <div className="text-right">
             <div className="text-xs text-neutral-400">
               {train.speed} km/h
@@ -338,13 +346,13 @@ export function VirtualizedTrainList({
               ETA: {train.eta.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </div>
           </div>
-          
+
           <div className={cn(
             "px-2 py-1 rounded text-xs font-medium",
-            statusBgColors[train.status],
-            statusColors[train.status]
+            statusBgColors[(train.status as keyof typeof statusBgColors)],
+            statusColors[(train.status as keyof typeof statusColors)]
           )}>
-            {train.status === 'on-time' ? '✓' : 
+            {train.status === 'on-time' ? '✓' :
              train.status === 'delayed' ? '⚠' : '✕'}
           </div>
         </div>

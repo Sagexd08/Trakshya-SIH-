@@ -36,7 +36,7 @@ export interface ChatMessage {
   content: string;
   timestamp: Date;
   metadata?: {
-    recommendations?: AIRecommendation[];
+    recommendations?: Array<AIRecommendation | string>;
     charts?: string[];
     actions?: string[];
   };

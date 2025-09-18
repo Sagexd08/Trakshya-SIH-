@@ -1,6 +1,6 @@
-import { createClient } from '@supabase/supabase-js';
+import { createSupabaseBrowser } from '@/lib/supabase/client';
 import { useCallback, useState } from 'react';
-import { format } from 'date-fns';
+import { format as formatDate } from 'date-fns';
 
 // Compliance standards
 export const COMPLIANCE_STANDARDS = {
@@ -38,10 +38,7 @@ export type ExportFormat = typeof COMPLIANCE_STANDARDS.exportFormats[number];
 
 // Data export utilities
 export class DataExporter {
-  private static supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+  private static supabase = createSupabaseBrowser();
 
   // Export user data
   static async exportUserData(
@@ -201,7 +198,7 @@ export class DataExporter {
                 <tr><th>Date</th><th>Action</th><th>Details</th></tr>
                 ${data.auditLogs.map((log: any) => `
                   <tr>
-                    <td>${format(new Date(log.created_at), 'yyyy-MM-dd HH:mm:ss')}</td>
+                    <td>${formatDate(new Date(log.created_at), 'yyyy-MM-dd HH:mm:ss')}</td>
                     <td>${log.action}</td>
                     <td>${JSON.stringify(log.details)}</td>
                   </tr>
@@ -264,10 +261,7 @@ export class DataExporter {
 
 // Data anonymization utilities
 export class DataAnonymizer {
-  private static supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+  private static supabase = createSupabaseBrowser();
 
   // Anonymize user data
   static async anonymizeUserData(userId: string): Promise<void> {
@@ -323,18 +317,18 @@ export function useCompliance() {
 
   const exportUserData = useCallback(async (
     userId: string,
-    format: ExportFormat = 'json',
+    exportFormat: ExportFormat = 'json',
     includeAuditLogs: boolean = false
   ) => {
     setIsExporting(true);
     try {
-      const blob = await DataExporter.exportUserData(userId, format, includeAuditLogs);
-      
+      const blob = await DataExporter.exportUserData(userId, exportFormat, includeAuditLogs);
+
       // Download the file
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `user-data-${userId}-${format(new Date(), 'yyyy-MM-dd')}.${format}`;
+      a.download = `user-data-${userId}-${formatDate(new Date(), 'yyyy-MM-dd')}.${exportFormat}`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);

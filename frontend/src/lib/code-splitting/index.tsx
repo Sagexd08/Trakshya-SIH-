@@ -1,6 +1,7 @@
 import React, { Suspense, lazy, ComponentType, LazyExoticComponent } from 'react';
 import { motion } from 'framer-motion';
 import { Loader2 } from 'lucide-react';
+import type { VirtualizedTrainListProps } from '@/components/VirtualizedList';
 
 // Loading component for code-split components
 export function LoadingSpinner({ message = 'Loading...' }: { message?: string }) {
@@ -184,8 +185,11 @@ export const LazyThreeMapOverlay = createLazyComponent(
   }
 );
 
-export const LazyVirtualizedTrainList = createLazyComponent(
-  () => import('@/components/VirtualizedList').then(module => ({ default: module.VirtualizedTrainList })),
+export const LazyVirtualizedTrainList = createLazyComponent<VirtualizedTrainListProps>(
+  () =>
+    import('@/components/VirtualizedList').then((module) => ({
+      default: module.VirtualizedTrainList as React.ComponentType<VirtualizedTrainListProps>,
+    })) as Promise<{ default: React.ComponentType<VirtualizedTrainListProps> }>,
   {
     loadingMessage: 'Loading train list...',
   }

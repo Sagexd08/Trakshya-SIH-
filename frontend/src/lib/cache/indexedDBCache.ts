@@ -170,10 +170,10 @@ class IndexedDBCache {
     try {
       const tx = this.db.transaction(storeName as any, 'readonly');
       const store = tx.objectStore(storeName as any);
-      const index = store.index('by-timestamp');
-      
+      const index = (store as any).index('by-timestamp');
+
       // Get entries in reverse chronological order (newest first)
-      const entries = await index.getAll(undefined, limit);
+      const entries = (await index.getAll(undefined, limit)) as Array<{ id: string; data: any; timestamp: number; version?: number }>;
       entries.reverse();
       
       const now = Date.now();
@@ -242,8 +242,8 @@ class IndexedDBCache {
       for (const storeName of storeNames) {
         const tx = this.db.transaction(storeName as any, 'readwrite');
         const store = tx.objectStore(storeName as any);
-        const index = store.index('by-timestamp');
-        
+        const index = (store as any).index('by-timestamp');
+
         // Get all expired entries
         const expiredEntries = await index.getAll(
           IDBKeyRange.upperBound(now - this.maxAge)
@@ -272,7 +272,7 @@ class IndexedDBCache {
       const count = await store.count();
       
       if (count > this.maxEntries) {
-        const index = store.index('by-timestamp');
+        const index = (store as any).index('by-timestamp');
         const oldestEntries = await index.getAll(
           undefined,
           count - this.maxEntries
@@ -375,8 +375,8 @@ class IndexedDBCache {
       for (const storeName of storeNames) {
         const tx = this.db.transaction(storeName as any, 'readonly');
         const store = tx.objectStore(storeName as any);
-        const index = store.index('by-timestamp');
-        
+        const index = (store as any).index('by-timestamp');
+
         const count = await store.count();
         totalSize += count;
         

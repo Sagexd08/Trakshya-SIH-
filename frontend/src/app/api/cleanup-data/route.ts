@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { auth } from '@clerk/nextjs';
+import { auth } from '@clerk/nextjs/server';
 
 const supabase = createClient(
   process.env.SUPABASE_URL!,
@@ -10,8 +10,8 @@ const supabase = createClient(
 export async function POST(request: NextRequest) {
   try {
     // Verify authentication and admin role
-    const { userId } = auth();
-    
+    const { userId } = await auth();
+
     if (!userId) {
       return NextResponse.json(
         { error: 'Unauthorized' },
@@ -45,50 +45,50 @@ export async function POST(request: NextRequest) {
     const twoYearsAgo = new Date();
     twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
     
-    const { count: auditLogsDeleted } = await supabase
+    const { data: auditLogsDeletedRows } = await supabase
       .from('audit_logs')
       .delete()
       .lt('created_at', twoYearsAgo.toISOString())
-      .select('*', { count: 'exact', head: true });
-    
-    cleanupResults.auditLogs = auditLogsDeleted || 0;
+      .select();
+
+    cleanupResults.auditLogs = auditLogsDeletedRows?.length ?? 0;
 
     // Clean up old train data (older than 30 days)
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     
-    const { count: trainDataDeleted } = await supabase
+    const { data: trainDataDeletedRows } = await supabase
       .from('train_data')
       .delete()
       .lt('timestamp', thirtyDaysAgo.toISOString())
-      .select('*', { count: 'exact', head: true });
-    
-    cleanupResults.trainData = trainDataDeleted || 0;
+      .select();
+
+    cleanupResults.trainData = trainDataDeletedRows?.length ?? 0;
 
     // Clean up resolved conflicts (older than 7 days)
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     
-    const { count: conflictsDeleted } = await supabase
+    const { data: conflictsDeletedRows } = await supabase
       .from('conflicts')
       .delete()
       .eq('status', 'resolved')
       .lt('updated_at', sevenDaysAgo.toISOString())
-      .select('*', { count: 'exact', head: true });
-    
-    cleanupResults.conflicts = conflictsDeleted || 0;
+      .select();
+
+    cleanupResults.conflicts = conflictsDeletedRows?.length ?? 0;
 
     // Clean up old energy data (older than 90 days)
     const ninetyDaysAgo = new Date();
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
     
-    const { count: energyDataDeleted } = await supabase
+    const { data: energyDataDeletedRows } = await supabase
       .from('energy_data')
       .delete()
       .lt('timestamp', ninetyDaysAgo.toISOString())
-      .select('*', { count: 'exact', head: true });
-    
-    cleanupResults.energyData = energyDataDeleted || 0;
+      .select();
+
+    cleanupResults.energyData = energyDataDeletedRows?.length ?? 0;
 
     // Anonymize users who haven't been active for 1 year
     const oneYearAgo = new Date();
@@ -162,10 +162,10 @@ export async function POST(request: NextRequest) {
 }
 
 // GET endpoint to check cleanup status
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
-    const { userId } = auth();
-    
+    const { userId } = await auth();
+
     if (!userId) {
       return NextResponse.json(
         { error: 'Unauthorized' },

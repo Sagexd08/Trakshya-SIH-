@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
     const { userId, role: defaultRole } = await getAuthenticatedUser();
     if (!userId) {
@@ -112,7 +112,7 @@ export async function GET(request: NextRequest) {
     const allowedRoles: AllowedRole[] = ["admin", "controller", "analyst"];
 
     // Get user role
-    let userRole: AllowedRole = allowedRoles.includes(defaultRole as AllowedRole)
+    const userRole: AllowedRole = allowedRoles.includes(defaultRole as AllowedRole)
       ? (defaultRole as AllowedRole)
       : "controller";
 
@@ -154,11 +154,16 @@ export async function GET(request: NextRequest) {
           predictedTime: c.predicted_time
         })) || [];
 
-        const avgDelay = trainsResult.data?.reduce((sum, train) => sum + (train.delay || 0), 0) / activeTrains || 0;
+        const totalDelay = (trainsResult.data ?? []).reduce((sum, train) => sum + ((train as { delay?: number }).delay ?? 0), 0);
+        const avgDelay = activeTrains > 0 ? totalDelay / activeTrains : 0;
 
-        const energyData = energyResult.data || [];
+        const energyData = energyResult.data ?? [];
         const energyEfficiency = energyData.length > 0
-          ? (energyData.reduce((sum, e) => sum + (e.optimized / e.baseline), 0) / energyData.length) * 100
+          ? (energyData.reduce((sum, e) => {
+              const baseline = (e as { baseline?: number }).baseline ?? 1;
+              const optimized = (e as { optimized?: number }).optimized ?? baseline;
+              return sum + (baseline > 0 ? optimized / baseline : 1);
+            }, 0) / energyData.length) * 100
           : 90;
 
         context = {

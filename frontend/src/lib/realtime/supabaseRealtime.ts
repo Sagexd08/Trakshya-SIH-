@@ -215,13 +215,13 @@ class SupabaseRealtimeManager {
             table,
             filter
           },
-          (payload) => {
+          (payload: RealtimePostgresChangesPayload<any>) => {
             if (onData) {
               onData(payload);
             }
           }
         )
-        .subscribe((status) => {
+        .subscribe((status: 'SUBSCRIBED' | 'CHANNEL_ERROR' | 'TIMED_OUT' | 'CLOSED') => {
           if (status === 'SUBSCRIBED') {
             this.connectionState.isConnected = true;
             this.connectionState.lastConnected = new Date();

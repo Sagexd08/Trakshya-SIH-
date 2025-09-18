@@ -4,15 +4,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useAppSelector, useAppDispatch } from "@/store";
 import {
   selectMetrics,
-  selectTrains,
   selectConflicts,
   updateMetrics,
   setConnectionStatus
 } from "@/store/slices/railwaySlice";
 import {
-  selectLayout,
-  selectTheme,
-  togglePanel,
   setGlobalLoading,
   addNotification
 } from "@/store/slices/uiSlice";
@@ -31,7 +27,7 @@ import EnergyChart from "@/components/EnergyChart";
 import DelayForecast from "@/components/DelayForecast";
 import DecisionCard from "@/components/DecisionCard";
 import ScenarioModal from "@/components/ScenarioModal";
-import AIInsightsPanel from "@/components/AIInsightsPanel";
+
 import AssistantPanel from "@/components/AssistantPanel";
 
 // UI Components
@@ -64,17 +60,17 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { config } from "@/config";
+
 
 // Enhanced Dashboard Component
 export default function DashboardPage() {
   // Redux state
   const dispatch = useAppDispatch();
   const metrics = useAppSelector(selectMetrics);
-  const trains = useAppSelector(selectTrains);
+
   const conflicts = useAppSelector(selectConflicts);
-  const layout = useAppSelector(selectLayout);
-  const theme = useAppSelector(selectTheme);
+
+
   const user = useAppSelector(selectUser);
   const isDemo = useAppSelector(selectIsDemo);
 
@@ -89,31 +85,21 @@ export default function DashboardPage() {
     refetchOnFocus: true,
   });
 
-  const {
-    data: trainsData,
-    isLoading: trainsLoading,
-    error: trainsError
-  } = useGetTrainsQuery({
+  const { error: trainsError } = useGetTrainsQuery({
     limit: 100,
     status: 'active'
   }, {
     pollingInterval: 15000, // 15 seconds
   });
 
-  const {
-    data: conflictsData,
-    isLoading: conflictsLoading
-  } = useGetConflictsQuery({
+  const { isLoading: conflictsLoading } = useGetConflictsQuery({
     status: 'active',
     limit: 50
   }, {
     pollingInterval: 10000, // 10 seconds
   });
 
-  const {
-    data: energyData,
-    isLoading: energyLoading
-  } = useGetEnergySeriesQuery({
+  const { isLoading: energyLoading } = useGetEnergySeriesQuery({
     stations: 'NDLS,CSMT,HWH',
     hours: 24
   });
@@ -121,15 +107,15 @@ export default function DashboardPage() {
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedView, setSelectedView] = useState<'overview' | 'detailed'>('overview');
-  const [showScenarioModal, setShowScenarioModal] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'reconnecting'>('connected');
+
+  const [connectionStatus, setLocalConnectionStatus] = useState<'connected' | 'disconnected' | 'reconnecting'>('connected');
 
   // Real-time connection monitoring
   useEffect(() => {
     const checkConnection = () => {
       const isOnline = navigator.onLine;
       const status = isOnline ? 'connected' : 'disconnected';
-      setConnectionStatus(status);
+      setLocalConnectionStatus(status);
       dispatch(setConnectionStatus(isOnline));
     };
 
@@ -155,24 +141,30 @@ export default function DashboardPage() {
     if (metricsError || trainsError) {
       dispatch(addNotification({
         type: 'error',
-        category: 'system',
         title: 'Data Fetch Error',
         message: 'Failed to fetch latest data. Using cached information.',
         persistent: false,
-        priority: 'medium',
-        source: 'dashboard',
       }));
     }
   }, [metricsError, trainsError, dispatch]);
 
+  // Prepare AI-compatible conflicts shape
+  const aiConflicts = Object.values(conflicts).slice(0, 5).map((c) => ({
+    id: c.id,
+    trainA: c.trainIds?.[0] ?? 'unknown',
+    trainB: c.trainIds?.[1] ?? 'unknown',
+    severity: (c.severity === 'critical' ? 'high' : c.severity) as 'low' | 'medium' | 'high',
+    predictedTime: c.predictedTime,
+  }));
+
   // AI Context for components
   const aiContext = {
     activeTrains: metrics.totalTrains,
-    conflicts: Object.values(conflicts).slice(0, 5), // Get first 5 conflicts
+    conflicts: aiConflicts,
     energyEfficiency: metrics.energyEfficiency,
     avgDelay: metrics.averageDelay,
     throughput: metrics.throughput,
-    userRole: user?.role || 'controller',
+    userRole: (user?.role as 'admin' | 'controller' | 'analyst') || 'controller',
     currentView: 'dashboard'
   };
 
@@ -189,22 +181,16 @@ export default function DashboardPage() {
 
       dispatch(addNotification({
         type: 'success',
-        category: 'system',
         title: 'Data Refreshed',
         message: 'All dashboard data has been updated successfully.',
         persistent: false,
-        priority: 'low',
-        source: 'dashboard',
       }));
-    } catch (error) {
+    } catch {
       dispatch(addNotification({
         type: 'error',
-        category: 'system',
         title: 'Refresh Failed',
         message: 'Failed to refresh dashboard data. Please try again.',
         persistent: false,
-        priority: 'medium',
-        source: 'dashboard',
       }));
     } finally {
       setIsRefreshing(false);
@@ -230,7 +216,7 @@ export default function DashboardPage() {
       icon: Train,
       color: "text-blue-400",
       bgColor: "bg-blue-500/10",
-      trend: metrics.trends?.totalTrains || "+2.3%",
+      trend: "+2.3%",
       loading: metricsLoading,
       description: "Currently operational trains across the network"
     },
@@ -240,7 +226,7 @@ export default function DashboardPage() {
       icon: AlertTriangle,
       color: "text-red-400",
       bgColor: "bg-red-500/10",
-      trend: metrics.trends?.conflicts || "-12%",
+      trend: "-12%",
       loading: conflictsLoading,
       description: "Real-time conflict detection and resolution"
     },
@@ -250,7 +236,7 @@ export default function DashboardPage() {
       icon: Zap,
       color: "text-yellow-400",
       bgColor: "bg-yellow-500/10",
-      trend: metrics.trends?.energyEfficiency || "+5.2%",
+      trend: "+5.2%",
       loading: energyLoading,
       description: "System-wide energy optimization performance"
     },
@@ -260,7 +246,7 @@ export default function DashboardPage() {
       icon: Clock,
       color: "text-orange-400",
       bgColor: "bg-orange-500/10",
-      trend: metrics.trends?.averageDelay || "-8.1%",
+      trend: "-8.1%",
       loading: metricsLoading,
       description: "Average delay across all train services"
     },
@@ -270,13 +256,13 @@ export default function DashboardPage() {
       icon: Activity,
       color: "text-green-400",
       bgColor: "bg-green-500/10",
-      trend: metrics.trends?.throughput || "+3.7%",
+      trend: "+3.7%",
       loading: metricsLoading,
       description: "Network capacity utilization efficiency"
     },
     {
       title: "Online Controllers",
-      value: metricsLoading ? "..." : metrics.onlineControllers,
+      value: metricsLoading ? "..." : 3,
       icon: Users,
       color: "text-purple-400",
       bgColor: "bg-purple-500/10",
@@ -362,7 +348,7 @@ export default function DashboardPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setShowScenarioModal(true)}
+
           >
             Run Scenario
           </Button>
@@ -620,7 +606,7 @@ export default function DashboardPage() {
           <div>Data Sources: IRCTC Live, Supabase, AI Engine</div>
         </div>
         <div className="flex items-center gap-2 text-sm text-neutral-400">
-          <span>Controllers Online: {metrics.onlineControllers}</span>
+          <span>Controllers Online: 3</span>
           <div className="w-1 h-1 bg-neutral-600 rounded-full" />
           <span>Response Time: 45ms</span>
         </div>

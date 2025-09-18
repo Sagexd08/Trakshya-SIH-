@@ -3,7 +3,7 @@ import mapboxgl from "mapbox-gl";
 import { useEffect, useRef, useState, useCallback, Suspense } from "react";
 import type { FeatureCollection, Point } from "geojson";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Play,
@@ -13,7 +13,7 @@ import {
   Layers,
   Navigation,
   AlertTriangle,
-  Settings,
+
   Zap,
   Activity,
   Eye,
@@ -69,6 +69,15 @@ interface ConflictZone {
   affectedTrains: string[];
 }
 
+interface RealtimeConflict {
+  id: string;
+  lng: number;
+  lat: number;
+  severity: 'low' | 'medium' | 'high';
+  affectedTrains?: string[];
+}
+
+
 interface TrainData {
   id: string;
   lng: number;
@@ -85,16 +94,13 @@ interface TrainData {
 export default function DigitalTwinMap() {
   const ref = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
-  const animationRef = useRef<number | null>(null);
-  
+
+
   // Real-time data hooks
   const {
     data: realtimeTrains,
-    isConnected: trainsConnected,
-    error: trainsError,
-    addOptimisticUpdate: addOptimisticTrain,
-    removeOptimisticUpdate: removeOptimisticTrain
-  } = useRealtimeData<Train>({
+    isConnected: trainsConnected
+  } = useRealtimeData<TrainData>({
     table: 'train_positions',
     initialFetch: true,
     cacheEnabled: true,
@@ -103,9 +109,8 @@ export default function DigitalTwinMap() {
 
   const {
     data: realtimeConflicts,
-    isConnected: conflictsConnected,
-    error: conflictsError
-  } = useRealtimeData<Conflict>({
+    isConnected: conflictsConnected
+  } = useRealtimeData<RealtimeConflict>({
     table: 'conflicts',
     initialFetch: true,
     cacheEnabled: true
@@ -115,9 +120,7 @@ export default function DigitalTwinMap() {
   const {
     pathPredictions,
     conflicts: predictedConflicts,
-    isLoading: predictionLoading,
-    getTrainPrediction,
-    getHighPriorityConflicts
+    isLoading: predictionLoading
   } = usePathPrediction(realtimeTrains, {
     predictionHours: 2,
     updateInterval: 30000,
@@ -246,10 +249,10 @@ export default function DigitalTwinMap() {
         bearing: -17.6,
         duration: 2000
       });
-      setMapState(prev => ({ 
-        ...prev, 
-        selectedTrain: null, 
-        followingTrain: null 
+      setMapState(prev => ({
+        ...prev,
+        selectedTrain: null,
+        followingTrain: null
       }));
       toast.success("View reset to default");
     }
@@ -295,10 +298,14 @@ export default function DigitalTwinMap() {
   }, []);
 
   // Main map initialization effect
+
   useEffect(() => {
+
+
     if (!ref.current || !TOKEN) {
       setError("Mapbox token not configured");
       setIsLoading(false);
+
       return;
     }
 
@@ -333,7 +340,7 @@ export default function DigitalTwinMap() {
           const tracksResponse = await fetch(TRACKS_URL);
           if (tracksResponse.ok) {
             const tracksData = await tracksResponse.json();
-            
+
             map.addSource('tracks', {
               type: 'geojson',
               data: tracksData
@@ -497,7 +504,7 @@ export default function DigitalTwinMap() {
             const coords = (feature.geometry as Point).coordinates as [number, number];
             const props = feature.properties as TrainData;
 
-            const popup = new mapboxgl.Popup({ closeButton: false })
+            new mapboxgl.Popup({ closeButton: false })
               .setLngLat(coords)
               .setHTML(`
                 <div class="p-2 text-sm">
@@ -525,34 +532,30 @@ export default function DigitalTwinMap() {
         animationTimer = setInterval(() => {
           if (!mapState.isPlaying) return;
 
-          // Simulate train movement
-          setTrains(prevTrains => {
-            const updatedTrains = prevTrains.map(train => ({
-              ...train,
-              lng: train.lng + (Math.random() - 0.5) * 0.005,
-              lat: train.lat + (Math.random() - 0.5) * 0.005,
-              speedKmph: Math.max(40, Math.min(120, train.speedKmph + (Math.random() - 0.5) * 10)),
-              delayMin: Math.max(0, Math.min(30, train.delayMin + (Math.random() - 0.5) * 2))
-            }));
+          // Simulate train movement (visual-only; updates GeoJSON source)
+          const updatedTrains = trains.map(train => ({
+            ...train,
+            lng: train.lng + (Math.random() - 0.5) * 0.005,
+            lat: train.lat + (Math.random() - 0.5) * 0.005,
+            speedKmph: Math.max(40, Math.min(120, train.speedKmph + (Math.random() - 0.5) * 10)),
+            delayMin: Math.max(0, Math.min(30, train.delayMin + (Math.random() - 0.5) * 2))
+          }));
 
-            // Update map source
-            const source = map.getSource('trains') as mapboxgl.GeoJSONSource;
-            if (source) {
-              source.setData({
-                type: 'FeatureCollection',
-                features: updatedTrains.map(train => ({
-                  type: 'Feature',
-                  properties: train,
-                  geometry: {
-                    type: 'Point',
-                    coordinates: [train.lng, train.lat]
-                  }
-                }))
-              });
-            }
-
-            return updatedTrains;
-          });
+          // Update map source
+          const source = map.getSource('trains') as mapboxgl.GeoJSONSource;
+          if (source) {
+            source.setData({
+              type: 'FeatureCollection',
+              features: updatedTrains.map(train => ({
+                type: 'Feature',
+                properties: train,
+                geometry: {
+                  type: 'Point',
+                  coordinates: [train.lng, train.lat]
+                }
+              }))
+            });
+          }
 
           // Update performance metrics
           setMapState(prev => ({
@@ -593,19 +596,27 @@ export default function DigitalTwinMap() {
   }, [mapState.mapStyle, mapState.isPlaying, mapState.followingTrain]);
 
   // Handle train selection from Three.js overlay
+
+
+
   useEffect(() => {
+
+
     const handleTrainSelected = (event: CustomEvent) => {
       const { trainId } = event.detail;
       selectTrain(trainId);
+
     };
 
     window.addEventListener('trainSelected', handleTrainSelected as EventListener);
     return () => {
       window.removeEventListener('trainSelected', handleTrainSelected as EventListener);
     };
-  }, []);
+  }, [selectTrain]);
 
   if (!TOKEN) {
+
+
     return (
       <div className="w-full h-full grid place-items-center bg-neutral-950 text-neutral-400 border border-neutral-800 rounded">
         <div className="text-center text-sm">

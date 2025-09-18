@@ -5,8 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
-import { AlertTriangle, TrendingUp, Clock, Zap, Play, Pause, RotateCcw, ZoomIn, ZoomOut, Filter } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { AlertTriangle, Play, Pause, RotateCcw } from "lucide-react";
+
 import { useRealtimeData } from "@/lib/hooks/useRealtimeData";
 
 interface ConflictData {
@@ -40,9 +40,7 @@ interface HeatmapState {
 
 export default function ConflictHeatmap() {
   const svgRef = useRef<SVGSVGElement>(null);
-  const timelineRef = useRef<SVGSVGElement>(null);
-  const brushRef = useRef<d3.BrushBehavior<unknown> | null>(null);
-  const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
+
 
   // Real-time conflict data
   const {
@@ -66,7 +64,7 @@ export default function ConflictHeatmap() {
   });
 
   const [selectedCell, setSelectedCell] = useState<TimeDistanceCell | null>(null);
-  const [hoveredCell, setHoveredCell] = useState<TimeDistanceCell | null>(null);
+
 
   // Process conflict data into time-distance grid
   const processConflictData = useCallback((conflicts: ConflictData[]): TimeDistanceCell[] => {
@@ -158,7 +156,7 @@ export default function ConflictHeatmap() {
       .padding(0.05);
 
     const yScale = d3.scaleBand()
-      .domain(d3.range(0, 50).map(d => String(d * 10)))
+      .domain(d3.range(0, 50).map((d: number) => String(d * 10)))
       .range([height, 0])
       .padding(0.05);
 
@@ -174,28 +172,28 @@ export default function ConflictHeatmap() {
     );
 
     // Render heatmap cells
-    const cells = g.selectAll(".cell")
+    g.selectAll(".cell")
       .data(filteredData)
       .enter().append("rect")
       .attr("class", "cell")
-      .attr("x", d => xScale(String(d.time)) || 0)
-      .attr("y", d => yScale(String(d.distance)) || 0)
+      .attr("x", (d: any) => xScale(String(d.time)) || 0)
+      .attr("y", (d: any) => yScale(String(d.distance)) || 0)
       .attr("width", xScale.bandwidth())
       .attr("height", yScale.bandwidth())
-      .attr("fill", d => colorScale(d.intensity))
+      .attr("fill", (d: any) => colorScale(d.intensity))
       .attr("stroke", "#1f2937")
       .attr("stroke-width", 0.5)
       .attr("rx", 2)
       .style("cursor", "pointer")
-      .on("mouseover", function(event, d) {
-        setHoveredCell(d);
+      .on("mouseover", function(this: any) {
+
         d3.select(this).attr("stroke", "#06b6d4").attr("stroke-width", 2);
       })
-      .on("mouseout", function() {
-        setHoveredCell(null);
+      .on("mouseout", function(this: any) {
+
         d3.select(this).attr("stroke", "#1f2937").attr("stroke-width", 0.5);
       })
-      .on("click", function(event, d) {
+      .on("click", function(event: any, d: any) {
         setSelectedCell(d);
       });
 
@@ -252,8 +250,8 @@ export default function ConflictHeatmap() {
     gradient.selectAll("stop")
       .data(d3.range(0, 1.1, 0.1))
       .enter().append("stop")
-      .attr("offset", d => `${d * 100}%`)
-      .attr("stop-color", d => colorScale(d));
+      .attr("offset", (d: number) => `${d * 100}%`)
+      .attr("stop-color", (d: number) => colorScale(d));
 
     legend.append("rect")
       .attr("width", legendWidth)
