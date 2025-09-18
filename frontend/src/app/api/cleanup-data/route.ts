@@ -2,10 +2,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { auth } from '@clerk/nextjs/server';
 
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+function getSupabase() {
+  const url = process.env.SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !serviceKey) {
+    // Avoid build-time crashes on Vercel when env isn't available
+    throw new Error('Supabase env not configured (SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY)');
+  }
+  return createClient(url, serviceKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,6 +28,8 @@ export async function POST(request: NextRequest) {
         { status: 401 }
       );
     }
+
+    const supabase = getSupabase();
 
     // Check if user is admin
     const { data: profile } = await supabase
@@ -172,6 +184,8 @@ export async function GET(_request: NextRequest) {
         { status: 401 }
       );
     }
+
+    const supabase = getSupabase();
 
     // Get last cleanup operation
     const { data: lastCleanup } = await supabase
