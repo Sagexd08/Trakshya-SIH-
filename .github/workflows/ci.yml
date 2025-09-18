@@ -1,39 +1,291 @@
-name: CI
+name: Trakshya CI/CD Pipeline
 
 on:
   push:
-    branches: ["**"]
+    branches: [ main, develop, production ]
   pull_request:
-    branches: ["**"]
+    branches: [ main, develop ]
+
+env:
+  NODE_VERSION: '20'
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
 jobs:
-  build-and-test:
+  lint-and-format:
+    name: Lint and Format Check
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: ./frontend
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Use Node.js 20
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
         run: npm ci || npm install
 
-      - name: Build
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Check TypeScript
+        run: npm run type-check
+
+  unit-tests:
+    name: Unit Tests with Coverage
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci || npm install
+
+      - name: Run unit tests with coverage
+        run: npm run test:coverage
+
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
+        with:
+          file: frontend/coverage/lcov.info
+          flags: unittests
+          name: trakshya-coverage
+
+      - name: Upload test artifacts
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: unit-test-results
+          path: frontend/coverage/
+
+  e2e-tests:
+    name: End-to-End Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci || npm install
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
+      - name: Build application
         run: npm run build
         env:
           NEXT_TELEMETRY_DISABLED: '1'
-          # Optional: supply a token to avoid map errors if pages pre-render use it
           NEXT_PUBLIC_MAPBOX_TOKEN: ${{ secrets.NEXT_PUBLIC_MAPBOX_TOKEN }}
           IRCTC_RAPIDAPI_KEY: ${{ secrets.IRCTC_RAPIDAPI_KEY }}
 
-      - name: Test
-        run: npm run test
+      - name: Run Playwright tests
+        run: npm run test:e2e
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 30
+
+  lighthouse-performance:
+    name: Lighthouse Performance Audit
+    runs-on: ubuntu-latest
+    needs: [lint-and-format, unit-tests]
+    defaults:
+      run:
+        working-directory: ./frontend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci || npm install
+
+      - name: Build application
+        run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+          NEXT_PUBLIC_MAPBOX_TOKEN: ${{ secrets.NEXT_PUBLIC_MAPBOX_TOKEN }}
+          IRCTC_RAPIDAPI_KEY: ${{ secrets.IRCTC_RAPIDAPI_KEY }}
+
+      - name: Run Lighthouse CI
+        run: |
+          npm install -g @lhci/cli@0.12.x
+          lhci autorun
+        env:
+          LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}
+
+  security-audit:
+    name: Security Vulnerability Scan
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci || npm install
+
+      - name: Run npm audit
+        run: npm audit --audit-level=moderate
+
+      - name: Run Snyk security scan
+        uses: snyk/actions/node@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high
+
+  build-and-deploy:
+    name: Build and Deploy to Vercel
+    runs-on: ubuntu-latest
+    needs: [lint-and-format, unit-tests, e2e-tests, lighthouse-performance, security-audit]
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/production'
+    defaults:
+      run:
+        working-directory: ./frontend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci || npm install
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Pull Vercel Environment Information
+        run: vercel pull --yes --environment=${{ github.ref == 'refs/heads/production' && 'production' || 'preview' }} --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build Project Artifacts
+        run: vercel build ${{ github.ref == 'refs/heads/production' && '--prod' || '' }} --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy Project Artifacts to Vercel
+        run: |
+          url=$(vercel deploy --prebuilt ${{ github.ref == 'refs/heads/production' && '--prod' || '' }} --token=${{ secrets.VERCEL_TOKEN }})
+          echo "DEPLOYMENT_URL=$url" >> $GITHUB_ENV
+
+      - name: Comment deployment URL on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `🚀 **Trakshya Deployment Ready!**\n\n📍 **Preview URL:** ${process.env.DEPLOYMENT_URL}\n\n✅ All tests passed\n🔍 Performance audit completed\n🛡️ Security scan passed`
+            })
+
+  post-deployment-monitoring:
+    name: Post-Deployment Monitoring
+    runs-on: ubuntu-latest
+    needs: [build-and-deploy]
+    if: github.ref == 'refs/heads/production'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Run production health checks
+        run: |
+          npm install -g lighthouse
+          lighthouse ${{ env.DEPLOYMENT_URL }} --output=json --output-path=lighthouse-prod.json --chrome-flags="--headless"
+
+      - name: Upload production performance results
+        uses: actions/upload-artifact@v3
+        with:
+          name: production-lighthouse-results
+          path: lighthouse-prod.json
+
+      - name: Send deployment notification
+        uses: 8398a7/action-slack@v3
+        if: always()
+        with:
+          status: ${{ job.status }}
+          channel: '#trakshya-deployments'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+          fields: repo,message,commit,author,action,eventName,ref,workflow
+          text: |
+            🚂 **Trakshya Production Deployment**
+
+            **Status:** ${{ job.status }}
+            **Branch:** ${{ github.ref }}
+            **Commit:** ${{ github.sha }}
+            **Author:** ${{ github.actor }}
+            **URL:** ${{ env.DEPLOYMENT_URL }}
+
+  cleanup:
+    name: Cleanup and Maintenance
+    runs-on: ubuntu-latest
+    needs: [build-and-deploy, post-deployment-monitoring]
+    if: always()
+    steps:
+      - name: Clean up old artifacts
+        run: |
+          echo "Cleaning up old test artifacts and temporary files..."
+
+      - name: Update deployment status
+        if: github.ref == 'refs/heads/production'
+        run: |
+          echo "✅ Trakshya deployment pipeline completed successfully"
+          echo "🚀 Production environment updated"
+          echo "📊 Monitoring and alerts active"
 

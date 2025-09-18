@@ -81,7 +81,7 @@ export async function GET(req: NextRequest) {
     let data: unknown = null;
     try { data = JSON.parse(text) as unknown; } catch { data = text; }
 
-    let status = 200;
+    const status = 200;
     let payload: unknown;
     if (upstream.ok) {
       payload = data;

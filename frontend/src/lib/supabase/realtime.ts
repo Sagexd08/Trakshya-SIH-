@@ -1,5 +1,6 @@
 "use client";
 import { createSupabaseBrowser } from "@/lib/supabase/client";
+import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 
 export type ChangeHandler = (payload: { table: string; event: string; record: any; }) => void;
 
@@ -10,7 +11,7 @@ export function subscribeTrainPositions(onChange: ChangeHandler) {
     .on(
       "postgres_changes",
       { event: "INSERT", schema: "public", table: "train_positions" },
-      (payload) => {
+      (payload: RealtimePostgresChangesPayload<any>) => {
         onChange({ table: "train_positions", event: "INSERT", record: (payload as any).new });
       }
     )
@@ -26,7 +27,7 @@ export function subscribeEnergyLogs(onChange: ChangeHandler) {
     .on(
       "postgres_changes",
       { event: "INSERT", schema: "public", table: "energy_logs" },
-      (payload) => {
+      (payload: RealtimePostgresChangesPayload<any>) => {
         onChange({ table: "energy_logs", event: "INSERT", record: (payload as any).new });
       }
     )
