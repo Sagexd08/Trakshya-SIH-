@@ -69,55 +69,7 @@ Copy code
 - Mapbox Access Token
 - Supabase Project Setup
 - Optional: IRCTC RapidAPI Key
-
-### 2. Install & Run (from `frontend/`)
-```bash
-npm install
-npm run dev   # http://localhost:3031
-3. Build & Test
-bash
-Copy code
-npm run build
-npm run start
-npm run test
-🔑 Environment Variables
-Create frontend/.env.local:
-
-bash
-Copy code
-# Mapbox
-NEXT_PUBLIC_MAPBOX_TOKEN=pk.YourTokenHere
-
-# IRCTC RapidAPI Key (server-only)
-IRCTC_RAPIDAPI_KEY=your-rapidapi-key
-
-# Supabase
-NEXT_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-
-# Clerk Auth
-NEXT_PUBLIC_CLERK_FRONTEND_API=<your-clerk-key>
-CLERK_SECRET_KEY=<your-clerk-secret>
-🔌 API Endpoints (local Next.js routes)
-/api/irctc/live-station
-Proxies IRCTC RapidAPI live station data.
-
-Query: station_code=NDLS&hours=2
-
-Returns train movement data in JSON.
-
-/api/energy/series
-Generates synthetic baseline vs optimized energy data.
-
-Query: stations=NDLS,CSMT,HWH&hours=2
-
-Returns energy chart dataset.
-
-/api/conflicts
-Runs conflict detection simulation using Supabase Edge Function.
-
-📊 Pages & Features
+## 📊 Pages & Features
 Dashboard: Digital Twin map + KPI summary
 
 Traffic: Density heatmap, 30-min playback scrubber
@@ -179,4 +131,51 @@ Copy code
 
 👉 This README is **SIH-pitch ready**, developer-friendly, and deployment-oriented.  
 
-Would you like me to also create a **README badge section for Tech Stack** (like shields.io badges f
+### 2. Install & Run (from `frontend/`)
+```bash
+npm install
+npm run dev   # http://localhost:3031
+3. Build & Test
+bash
+Copy code
+npm run build
+npm run start
+npm run test
+🔑 Environment Variables
+Create frontend/.env.local:
+
+bash
+Copy code
+# Mapbox
+NEXT_PUBLIC_MAPBOX_TOKEN=pk.YourTokenHere
+
+# IRCTC RapidAPI Key (server-only)
+IRCTC_RAPIDAPI_KEY=your-rapidapi-key
+
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+
+# Clerk Auth
+NEXT_PUBLIC_CLERK_FRONTEND_API=<your-clerk-key>
+CLERK_SECRET_KEY=<your-clerk-secret>
+🔌 API Endpoints (local Next.js routes)
+/api/irctc/live-station
+Proxies IRCTC RapidAPI live station data.
+
+Query: station_code=NDLS&hours=2
+
+Returns train movement data in JSON.
+
+/api/energy/series
+Generates synthetic baseline vs optimized energy data.
+
+Query: stations=NDLS,CSMT,HWH&hours=2
+
+Returns energy chart dataset.
+
+/api/conflicts
+Runs conflict detection simulation using Supabase Edge Function.'''
+
+
