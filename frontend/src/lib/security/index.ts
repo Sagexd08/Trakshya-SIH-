@@ -40,7 +40,16 @@ export const SECURITY_CONFIG = {
     styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
     fontSrc: ["'self'", "https://fonts.gstatic.com"],
     imgSrc: ["'self'", "data:", "https:", "blob:"],
-    connectSrc: ["'self'", "https://api.mapbox.com", "wss://"],
+    connectSrc: [
+      "'self'",
+      "https://api.mapbox.com",
+      "https://tiles.mapbox.com",
+      "https://*.supabase.co",
+      "https://*.supabase.in",
+      "https://*.ingest.sentry.io",
+      "ws:",
+      "wss:"
+    ],
   },
 };
 
@@ -417,7 +426,11 @@ export function useSessionSecurity() {
 // Initialize security features
 export function initializeSecurity() {
   // Set up CSP
-  if (typeof document !== 'undefined') {
+  if (typeof document !== 'undefined' && process.env.NODE_ENV === 'development') {
+    // Remove any existing meta CSP to avoid conflicts with response headers
+    const existing = document.querySelector('meta[http-equiv="Content-Security-Policy"]');
+    if (existing) existing.parentElement?.removeChild(existing);
+
     const meta = document.createElement('meta');
     meta.httpEquiv = 'Content-Security-Policy';
     meta.content = Object.entries(SECURITY_CONFIG.csp)

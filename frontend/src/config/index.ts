@@ -22,6 +22,8 @@ const envSchema = z.object({
   NEXT_PUBLIC_MAPBOX_TOKEN: z.string().optional(),
   IRCTC_RAPIDAPI_KEY: z.string().optional(),
   GOOGLE_GEMINI_API_KEY: z.string().optional(),
+  OPENROUTER_API_KEY: z.string().optional(),
+  OPENROUTER_MODEL: z.string().optional(),
 
   // Authentication
   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().optional(),
@@ -68,6 +70,8 @@ const parseEnv = () => {
       NEXT_PUBLIC_MAPBOX_TOKEN: process.env.NEXT_PUBLIC_MAPBOX_TOKEN,
       IRCTC_RAPIDAPI_KEY: process.env.IRCTC_RAPIDAPI_KEY,
       GOOGLE_GEMINI_API_KEY: process.env.GOOGLE_GEMINI_API_KEY,
+      OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
+      OPENROUTER_MODEL: process.env.OPENROUTER_MODEL,
 
       // Authentication
       NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
@@ -125,6 +129,11 @@ export const config = {
     gemini: {
       apiKey: env.GOOGLE_GEMINI_API_KEY,
       enabled: !!env.GOOGLE_GEMINI_API_KEY,
+    },
+    openrouter: {
+      apiKey: env.OPENROUTER_API_KEY,
+      model: env.OPENROUTER_MODEL || 'x-ai/grok-4-fast:free',
+      enabled: !!env.OPENROUTER_API_KEY,
     },
     clerk: {
       publishableKey: env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,

@@ -273,7 +273,7 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Enhanced Header with Status and Actions */}
       <div className="flex items-center justify-between">
         <div className="space-y-2">
@@ -356,7 +356,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Enhanced Metrics Overview */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
         {metricCards.map((metric, index) => (
           <motion.div
             key={metric.title}
@@ -426,7 +426,7 @@ export default function DashboardPage() {
       </AnimatePresence>
 
       {/* Main Dashboard Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Digital Twin Map */}
         <motion.div
           className={cn(
@@ -454,7 +454,7 @@ export default function DashboardPage() {
                 </Button>
               </div>
             </CardHeader>
-            <CardContent className="p-2 h-[420px]">
+            <CardContent className="p-3 h-[420px]">
               <DigitalTwinMap />
             </CardContent>
           </Card>
@@ -481,7 +481,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Secondary Dashboard Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Conflict Heatmap */}
         <motion.div
           className={cn(
@@ -511,7 +511,7 @@ export default function DashboardPage() {
                 </Button>
               </div>
             </CardHeader>
-            <CardContent className="p-2">
+            <CardContent className="p-3">
               <ConflictHeatmap />
             </CardContent>
           </Card>
@@ -532,7 +532,7 @@ export default function DashboardPage() {
                   <Badge variant="secondary">{metrics.energyEfficiency.toFixed(1)}%</Badge>
                 </CardTitle>
               </CardHeader>
-              <CardContent className="p-2">
+              <CardContent className="p-3">
                 <EnergyChart />
               </CardContent>
             </Card>
@@ -541,7 +541,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Bottom Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Delay Forecast */}
         <motion.div
           className="lg:col-span-2"
@@ -557,7 +557,7 @@ export default function DashboardPage() {
                 <Badge variant="outline">Next 4 hours</Badge>
               </CardTitle>
             </CardHeader>
-            <CardContent className="p-2">
+            <CardContent className="p-3">
               <DelayForecast />
             </CardContent>
           </Card>
@@ -577,7 +577,7 @@ export default function DashboardPage() {
                 AI Recommendations
               </CardTitle>
             </CardHeader>
-            <CardContent className="p-2 space-y-3">
+            <CardContent className="p-3 space-y-3">
               <DecisionCard
                 context={aiContext}
                 onRecommendationApply={(recommendation) => {

@@ -1,9 +1,16 @@
 "use client";
 import mapboxgl from "mapbox-gl";
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { useLstmDelayPrediction } from "@/lib/hooks/useLstmDelayPrediction";
+
 import { connectWS } from "@/lib/wsClient";
 import { subscribeTrainPositions } from "@/lib/supabase/realtime";
+import { createSupabaseBrowser } from "@/lib/supabase/client";
+import * as Sentry from "@sentry/nextjs";
 import { toast } from "sonner";
+import { LazyVirtualizedTrainList } from '@/lib/code-splitting';
+import PredictionAccuracyPanel from '@/components/PredictionAccuracyPanel';
+
 
 const TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "";
 if (TOKEN) mapboxgl.accessToken = TOKEN;
@@ -56,6 +63,13 @@ const MAJOR_STATIONS = [
 
 // GeoJSON feature type for sample stations
 type StationFeature = { properties?: { name?: string }; geometry: { coordinates: [number, number] } };
+class PredictionErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
+  constructor(props: any) { super(props); this.state = { hasError: false }; }
+  static getDerivedStateFromError() { return { hasError: true }; }
+  componentDidCatch(error: any, info: any) { try { Sentry.captureException(error); } catch {} }
+  render() { if (this.state.hasError) return (<div className="w-full h-[72vh] grid place-items-center text-neutral-400">Prediction UI error. Please reload.</div>); return this.props.children; }
+}
+
 
 
 type WSMessage = { type?: string; count?: number; text?: string };
@@ -167,6 +181,94 @@ function seedMockTrains(n = 120): TPoint[] {
 export default function RealTimeTraffic() {
   const ref = useRef<HTMLDivElement>(null);
 
+  type TrainListItem = {
+    id: string;
+    name: string;
+    status: 'on-time' | 'delayed' | 'cancelled';
+    delay: number;
+    position: { lat: number; lng: number };
+    speed: number;
+    route: string;
+    nextStation: string;
+    eta: Date;
+  };
+
+  const [trainList, setTrainList] = useState<TrainListItem[]>([]);
+  const trainsRef = useRef<TPoint[]>([]);
+
+  // Historical delay series per train (last 15 points)
+  const delayHistoryRef = useRef<Map<string, number[]>>(new Map());
+  const toTrainListItems = (list: TPoint[]): TrainListItem[] => list.map((t) => ({
+    id: String(t.id),
+    name: t.name || t.trainNo || 'Train',
+    status: (t.status as any) || (Number(t.delay||0) > 0 ? 'delayed' : 'on-time'),
+    delay: Number(t.delay || 0),
+    position: { lat: t.lat, lng: t.lng },
+    speed: Number(t.speed || 0),
+    route: `${t.name || 'Train'} E ${t.nextStop || 'Next'}`.replace('\u0019E','→'),
+    nextStation: t.nextStop || 'Unknown',
+    eta: new Date(Date.now() + Math.max(0, Number(t.delay||0)) * 60 * 1000),
+  }));
+
+  const [seriesInput, setSeriesInput] = useState<{ id: string; series: number[] }[]>([]);
+  const predictionsMapRef = useRef<Map<string, number[]>>(new Map());
+
+  const updateDelayHistory = (list: TPoint[]) => {
+    const map = delayHistoryRef.current;
+    for (const t of list) {
+      const arr = map.get(t.id) ?? [];
+      const d = Number(t.delay || 0);
+      arr.push(Number.isFinite(d) ? d : 0);
+      while (arr.length > 15) arr.shift();
+      map.set(t.id, arr);
+
+    }
+  };
+
+  const [predSettings, setPredSettings] = useState<{ enabled: boolean; horizonIdx: number; colorMode: 'current' | 'predicted' }>({ enabled: true, horizonIdx: 5, colorMode: 'current' });
+  const predSettingsRef = useRef<{ enabled: boolean; horizonIdx: number; colorMode: 'current' | 'predicted' }>({ enabled: true, horizonIdx: 5, colorMode: 'current' });
+  const setPred = (p: Partial<{ enabled: boolean; horizonIdx: number; colorMode: 'current' | 'predicted' }>) => {
+    predSettingsRef.current = { ...predSettingsRef.current, ...p };
+    setPredSettings(prev => ({ ...prev, ...p }));
+  };
+
+
+  // Reflect prediction settings changes in map layer visibility and record usage
+  useEffect(() => {
+    const map = (window as any)?.__mbx_map__ || null;
+    try {
+      const mode = predSettings.enabled ? predSettings.colorMode : 'current';
+      if (map && typeof map.setLayoutProperty === 'function') {
+        map.setLayoutProperty('traffic-circles', 'visibility', mode === 'current' ? 'visible' : 'none');
+        map.setLayoutProperty('prediction-overlay', 'visibility', mode === 'predicted' ? 'visible' : 'none');
+      }
+      Sentry.addBreadcrumb({ category: 'prediction-ui', message: `settings: mode=${mode} horizonIdx=${predSettings.horizonIdx}`, level: 'info' });
+    } catch {}
+  }, [predSettings.enabled, predSettings.colorMode, predSettings.horizonIdx]);
+
+  const refreshSeriesInput = () => {
+    const map = delayHistoryRef.current;
+    const series = Array.from(map.entries())
+      .filter(([, arr]) => arr.length >= 5)
+      .map(([id, arr]) => ({ id, series: arr.slice() }));
+    setSeriesInput(series);
+
+  };
+
+  // Run LSTM predictions for available series (6 steps ~ ~30 min horizon)
+  const { results: lstmResults } = useLstmDelayPrediction(seriesInput, 6);
+  useEffect(() => {
+    const m = new Map<string, number[]>();
+    for (const r of lstmResults || []) m.set(r.id, r.forecast || []);
+    predictionsMapRef.current = m;
+  }, [lstmResults]);
+  const predictionsForList: Record<string, number[]> = React.useMemo(() => {
+    const obj: Record<string, number[]> = {};
+    predictionsMapRef.current.forEach((v, k) => { obj[k] = v; });
+    return obj;
+  }, [lstmResults]);
+
+
 
   const [, setStats] = useState<{ active: number; avgSpeed: number; congestion: number }>({ active: 0, avgSpeed: 0, congestion: 0 });
 
@@ -186,6 +288,10 @@ export default function RealTimeTraffic() {
 
       antialias: true,
     });
+
+	    // Expose map instance for UI effects
+	    try { (window as any).__mbx_map__ = map; } catch {}
+
 
     let timer: ReturnType<typeof setInterval> | undefined;
     let poller: ReturnType<typeof setInterval> | undefined;
@@ -229,44 +335,109 @@ export default function RealTimeTraffic() {
     };
 
 
-    const toFC = (): GeoJSON.FeatureCollection<GeoJSON.Point, { id: string; weight: number; speed: number; trainNo?: string; name?: string; nextStop?: string; delay?: number; status?: string }> => ({
+    const toFC = (): GeoJSON.FeatureCollection<GeoJSON.Point, { id: string; weight: number; speed: number; trainNo?: string; name?: string; nextStop?: string; delay?: number; status?: string; pdelay?: number | null }> => ({
       type: "FeatureCollection",
-      features: getFilteredTrains().map((t) => ({
-        type: "Feature",
-        properties: {
-          id: t.id,
-          weight: t.weight,
-          speed: t.speed,
-          trainNo: t.trainNo,
-          name: t.name,
-          nextStop: t.nextStop,
-          delay: t.delay || 0,
-          status: t.status || 'unknown'
-        },
-        geometry: { type: "Point", coordinates: [t.lng, t.lat] },
-      })),
+      features: getFilteredTrains().map((t) => {
+        const forecast = predictionsMapRef.current.get(t.id);
+        const hIdx = Math.max(0, Math.min(5, Number(predSettingsRef.current.horizonIdx ?? 5)));
+        const pdelay = (predSettingsRef.current.enabled && forecast && forecast.length > hIdx)
+          ? Number(forecast[hIdx])
+          : null;
+        return {
+          type: "Feature",
+          properties: {
+            id: t.id,
+            weight: t.weight,
+            speed: t.speed,
+            trainNo: t.trainNo,
+            name: t.name,
+            nextStop: t.nextStop,
+            delay: t.delay || 0,
+            status: t.status || 'unknown',
+            pdelay
+          },
+          geometry: { type: "Point", coordinates: [t.lng, t.lat] },
+        };
+      }),
     });
 
     const updateSources = () => {
+      // Avoid calling getSource before style/sources are ready or after map removal (StrictMode)
+      const style = (map as any)?.style as any;
+      if (!style || (typeof map.isStyleLoaded === 'function' && !map.isStyleLoaded())) return;
+      const fc = toFC();
       const src = map.getSource("traffic") as mapboxgl.GeoJSONSource | undefined;
-      if (src) src.setData(toFC());
+      if (src && typeof (src as any).setData === 'function') src.setData(fc);
       const csrc = map.getSource("traffic-cluster") as mapboxgl.GeoJSONSource | undefined;
-      if (csrc) csrc.setData(toFC());
+      if (csrc && typeof (csrc as any).setData === 'function') csrc.setData(fc);
     };
+
+
+	      // Persist current delays and hydrate historical series from Supabase
+	      const deriveStation = (id: string) => (id.includes('-') ? id.split('-')[0] : undefined);
+	      const persistDelays = async (list: TPoint[]) => {
+	        try {
+	          const items = list.map(t => ({ train_id: t.id, delay_minutes: Number(t.delay || 0), station_code: deriveStation(t.id) }));
+	          await fetch('/api/railway/delay-history', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ items }) });
+	        } catch {}
+	      };
+	      const hydrateHistory = async (list: TPoint[]) => {
+	        try {
+	          const ids = list.slice(0, 100).map(t => t.id);
+	          if (!ids.length) return;
+	          const res = await fetch(`/api/railway/delay-history?train_ids=${encodeURIComponent(ids.join(','))}&limit=15`);
+	          const j = await res.json().catch(() => ({ items: [] }));
+	          const items: Array<{ train_id: string; delay_minutes: number }> = j.items || [];
+	          const map = delayHistoryRef.current;
+	          items.forEach(r => {
+	            const arr = map.get(r.train_id) ?? [];
+	            arr.push(Number(r.delay_minutes || 0));
+	            while (arr.length > 15) arr.shift();
+	            map.set(r.train_id, arr);
+	          });
+	          refreshSeriesInput();
+	        } catch {}
+	      };
+	      void persistDelays(trains);
+	      void hydrateHistory(trains);
 
 
     map.on("load", async () => {
       // Initialize with real-time data
+
+      // Helper to toggle between current vs predicted color layers
+      function applyColorMode() {
+        try {
+          const mode = predSettingsRef.current.enabled ? predSettingsRef.current.colorMode : 'current';
+          map.setLayoutProperty('traffic-circles', 'visibility', mode === 'current' ? 'visible' : 'none');
+          map.setLayoutProperty('prediction-overlay', 'visibility', mode === 'predicted' ? 'visible' : 'none');
+        } catch {}
+      }
+
       try {
         trains = await fetchRealTimeTrains();
         isLoadingTrains = false;
+        updateDelayHistory(trains);
+        refreshSeriesInput();
         toast.success(`Loaded ${trains.length} real-time trains`);
+        trainsRef.current = trains;
+        try { setTrainList(toTrainListItems(trains)); } catch {}
+
       } catch (error) {
         console.error('Failed to load real-time data:', error);
         trains = seedMockTrains(120);
         isLoadingTrains = false;
+        trainsRef.current = trains;
+        try { setTrainList(toTrainListItems(trains)); } catch {}
+
+        updateDelayHistory(trains);
+        refreshSeriesInput();
         toast.warning('Using simulated data - real-time unavailable');
       }
+
+	      // Persist latest snapshot and hydrate history
+	      try { void (async () => { await persistDelays(trains); await hydrateHistory(trains); })(); } catch {}
+
       // Heatmap source for density visualization
       map.addSource("traffic", { type: "geojson", data: toFC() });
       map.addLayer({
@@ -430,6 +601,9 @@ export default function RealTimeTraffic() {
             minw.oninput = () => { filters.minWeight = Number(minw.value); minwv.textContent = Number(filters.minWeight).toFixed(1); apply(); };
             slow.onchange = () => { filters.slowOnly = slow.checked; apply(); };
             invw.onchange = () => { filters.inView = invw.checked; apply(); };
+
+
+
           };
           render();
           return el;
@@ -438,12 +612,70 @@ export default function RealTimeTraffic() {
       };
       map.addControl(filtersCtrl, "top-right");
 
+	      // Prediction settings control
+	      const predCtrl: mapboxgl.IControl = {
+	        onAdd: () => {
+	          const el = document.createElement('div');
+	          el.className = 'mapboxgl-ctrl p-2 rounded bg-black/60 text-xs text-slate-200 space-y-2';
+	          el.innerHTML = `
+	            <div class="font-semibold text-slate-100">Prediction Settings</div>
+	            <label class="flex items-center gap-2">
+	              <input id="pred-enabled" type="checkbox" class="accent-sky-400" checked>
+	              <span>Show LSTM predictions</span>
+	            </label>
+	            <div class="flex items-center gap-2">
+	              <label>Horizon:</label>
+	              <select id="pred-horizon" class="bg-black/40 border border-white/10 rounded px-1">
+	                <option value="1">5m</option>
+	                <option value="3">15m</option>
+	                <option value="5" selected>30m</option>
+              </select>
+            </div>
+            <div class="flex items-center gap-2">
+              <label>Color by:</label>
+              <select id="pred-color" class="bg-black/40 border border-white/10 rounded px-1">
+                <option value="current" selected>Current Delays</option>
+                <option value="predicted">Predicted Delays</option>
+	              </select>
+	            </div>
+            <div id="pred-acc" class="pt-1 text-[11px] text-slate-300/90">
+              Accuracy (7d): <span class="text-slate-400">—</span>
+            </div>
+
+	          `;
+            const accEl = el.querySelector('#pred-acc span') as HTMLSpanElement | null;
+            const fetchAcc = async () => {
+              try {
+                const r = await fetch('/api/prediction/accuracy?window=7d', { cache: 'no-store' });
+                const j = await r.json();
+                const arr = Array.isArray(j?.horizons) ? j.horizons : [];
+                const f = (m: number) => arr.find((x: any) => Number(x.horizon_minutes) === m)?.pct_within_2m;
+                const txt = `5m ${f(5) ?? '\u2014'}% \u00b7 15m ${f(15) ?? '\u2014'}% \u00b7 30m ${f(30) ?? '\u2014'}% within \u00b12m`;
+                if (accEl) accEl.textContent = txt;
+              } catch {}
+            };
+            fetchAcc();
+            try { const id = setInterval(fetchAcc, 60_000); (el as any).__accTimer = id; } catch {}
+
+	          setTimeout(() => {
+	            const enabled = el.querySelector('#pred-enabled') as HTMLInputElement | null;
+	            const horizon = el.querySelector('#pred-horizon') as HTMLSelectElement | null;
+            const color = el.querySelector('#pred-color') as HTMLSelectElement | null;
+	            if (enabled) enabled.onchange = () => { setPred({ enabled: !!enabled.checked }); applyColorMode(); updateSources(); };
+	            if (horizon) horizon.onchange = () => { setPred({ horizonIdx: Number(horizon.value) }); updateSources(); };
+            if (color) color.onchange = () => { setPred({ colorMode: color.value as 'current' | 'predicted' }); applyColorMode(); updateSources(); };
+	          }, 0);
+	          return el;
+	        },
+	        onRemove: () => {}
+	      };
+	      map.addControl(predCtrl, 'top-right');
+
+
       // Refresh when moving if in-view filtering is on
       map.on("moveend", () => { if (filters.inView) { updateSources(); updateStats(); } });
 
-	              if (src) src.setData(toFC());
-	              const csrc = map.getSource("traffic-cluster") as mapboxgl.GeoJSONSource | undefined;
-	              if (csrc) csrc.setData(toFC());
+	              updateSources();
 	              updateStats();
 	            }
 	          });
@@ -477,6 +709,30 @@ export default function RealTimeTraffic() {
         },
       });
 
+
+      // Predicted delay overlay layer (toggleable)
+      map.addLayer({
+        id: "prediction-overlay",
+        type: "circle",
+        source: "traffic",
+        minzoom: 8,
+        layout: { visibility: "none" },
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["get", "weight"], 0, 3, 1, 8],
+          "circle-color": [
+            "case",
+            [">=", ["coalesce", ["get", "pdelay"], ["get", "delay"], 0], 30], "#ef4444",
+            [">=", ["coalesce", ["get", "pdelay"], ["get", "delay"], 0], 10], "#f59e0b",
+            [">=", ["coalesce", ["get", "pdelay"], ["get", "delay"], 0], 5], "#eab308",
+            "#22c55e"
+          ],
+          "circle-opacity": 0.9,
+          "circle-stroke-width": 1,
+          "circle-stroke-color": "#ffffff",
+        },
+      });
+      applyColorMode();
+
       // Click to see train/station details with real-time info
       map.on("click", "traffic-circles", (e: mapboxgl.MapMouseEvent & { features?: mapboxgl.MapboxGeoJSONFeature[] }) => {
         const f = (e as unknown as { features?: mapboxgl.MapboxGeoJSONFeature[] }).features?.[0];
@@ -491,12 +747,25 @@ export default function RealTimeTraffic() {
         const statusColor = delay >= 30 ? "#ef4444" : delay >= 10 ? "#f59e0b" : delay >= 5 ? "#eab308" : "#22c55e";
         const statusText = delay >= 30 ? "Severely Delayed" : delay >= 10 ? "Delayed" : delay >= 5 ? "Minor Delay" : "On Time";
 
+        const pid = String((p as any).id ?? "");
+        const forecast = predictionsMapRef.current.get(pid);
+        const hIdx = Math.max(0, Math.min(5, Number(predSettingsRef.current.horizonIdx ?? 5)));
+        const predVal = forecast && forecast.length > hIdx ? Number(forecast[hIdx]) : null;
+        const prevVal = forecast && forecast.length > Math.max(0, hIdx - 1) ? Number(forecast[Math.max(0, hIdx - 1)]) : null;
+        const trend = predVal != null && prevVal != null ? (predVal - prevVal) : null;
+        const trendArrow = trend == null ? '' : (trend < 0 ? '↓ improving' : trend > 0 ? '↑ worsening' : '→ steady');
+        const horizonLabel = hIdx === 1 ? '5m' : hIdx === 3 ? '15m' : '30m';
+        const predSnippet = (predSettingsRef.current.enabled && predVal != null)
+          ? `<div style="margin-bottom: 4px;"><strong>Predicted (${horizonLabel}):</strong> <span style="color: ${statusColor};">${predVal > 0 ? `+${predVal.toFixed(0)} min` : 'On Time'}</span> <span style="opacity:.7">${trendArrow}</span></div>`
+          : "";
+
         const html = `<div style="font:12px/1.4 system-ui, -apple-system, Segoe UI, Roboto; min-width:200px; background: #1f2937; color: white; border-radius: 8px; padding: 12px;">
           <div style="font-weight:600; font-size: 14px; margin-bottom: 8px;">${name || "Train"}</div>
           <div style="margin-bottom: 4px;"><strong>Train No:</strong> ${trainNo}</div>
           <div style="margin-bottom: 4px;"><strong>Speed:</strong> ${Number.isFinite(speed) ? speed.toFixed(0) : "-"} km/h</div>
           <div style="margin-bottom: 4px;"><strong>Delay:</strong> <span style="color: ${statusColor};">${delay > 0 ? `+${delay} min` : 'On Time'}</span></div>
           <div style="margin-bottom: 4px;"><strong>Status:</strong> <span style="color: ${statusColor};">${statusText}</span></div>
+          ${predSnippet}
           ${nextStop ? `<div><strong>Next Stop:</strong> ${nextStop}</div>` : ""}
           <div style="margin-top: 8px; font-size: 10px; color: #9ca3af;">Real-time data from IRCTC</div>
         </div>`;
@@ -505,8 +774,52 @@ export default function RealTimeTraffic() {
           .setHTML(html)
           .addTo(map);
       });
-      map.on("mouseenter", "traffic-circles", () => { map.getCanvas().style.cursor = "pointer"; });
-      map.on("mouseleave", "traffic-circles", () => { map.getCanvas().style.cursor = ""; });
+
+
+      // Mirror interactions for prediction overlay
+      map.on("click", "prediction-overlay", (e: mapboxgl.MapMouseEvent & { features?: mapboxgl.MapboxGeoJSONFeature[] }) => {
+        const f = (e as unknown as { features?: mapboxgl.MapboxGeoJSONFeature[] }).features?.[0];
+        const p = (f?.properties ?? {}) as Record<string, unknown>;
+        const trainNo = String(p.trainNo ?? p.id ?? "");
+        const name = String(p.name ?? "");
+        const nextStop = String(p.nextStop ?? "");
+        const speed = Number(p.speed ?? 0);
+        const delay = Number(p.delay ?? 0);
+        const status = String(p.status ?? "unknown");
+
+        const statusColor = delay >= 30 ? "#ef4444" : delay >= 10 ? "#f59e0b" : delay >= 5 ? "#eab308" : "#22c55e";
+        const statusText = delay >= 30 ? "Severely Delayed" : delay >= 10 ? "Delayed" : delay >= 5 ? "Minor Delay" : "On Time";
+
+        const pid = String((p as any).id ?? "");
+        const forecast = predictionsMapRef.current.get(pid);
+        const hIdx = Math.max(0, Math.min(5, Number(predSettingsRef.current.horizonIdx ?? 5)));
+        const predVal = forecast && forecast.length > hIdx ? Number(forecast[hIdx]) : null;
+        const prevVal = forecast && forecast.length > Math.max(0, hIdx - 1) ? Number(forecast[Math.max(0, hIdx - 1)]) : null;
+        const trend = predVal != null && prevVal != null ? (predVal - prevVal) : null;
+        const trendArrow = trend == null ? '' : (trend < 0 ? '↓ improving' : trend > 0 ? '↑ worsening' : '→ steady');
+        const horizonLabel = hIdx === 1 ? '5m' : hIdx === 3 ? '15m' : '30m';
+        const predSnippet = (predSettingsRef.current.enabled && predVal != null)
+          ? `<div style="margin-bottom: 4px;"><strong>Predicted (${horizonLabel}):</strong> <span style="color: ${statusColor};">${predVal > 0 ? `+${predVal.toFixed(0)} min` : 'On Time'}</span> <span style="opacity:.7">${trendArrow}</span></div>`
+          : "";
+
+        const html = `<div style="font:12px/1.4 system-ui, -apple-system, Segoe UI, Roboto; min-width:200px; background: #1f2937; color: white; border-radius: 8px; padding: 12px;">
+          <div style="font-weight:600; font-size: 14px; margin-bottom: 8px;">${name || "Train"}</div>
+          <div style="margin-bottom: 4px;"><strong>Train No:</strong> ${trainNo}</div>
+          <div style="margin-bottom: 4px;"><strong>Speed:</strong> ${Number.isFinite(speed) ? speed.toFixed(0) : "-"} km/h</div>
+          <div style="margin-bottom: 4px;"><strong>Delay:</strong> <span style="color: ${statusColor};">${delay > 0 ? `+${delay} min` : 'On Time'}</span></div>
+          <div style="margin-bottom: 4px;"><strong>Status:</strong> <span style="color: ${statusColor};">${statusText}</span></div>
+          ${predSnippet}
+          ${nextStop ? `<div><strong>Next Stop:</strong> ${nextStop}</div>` : ""}
+          <div style="margin-top: 8px; font-size: 10px; color: #9ca3af;">Real-time data from IRCTC</div>
+        </div>`;
+        new mapboxgl.Popup({ closeButton: false, closeOnMove: true })
+          .setLngLat(e.lngLat)
+          .setHTML(html)
+          .addTo(map);
+      });
+      map.on("mouseenter", "prediction-overlay", () => { map.getCanvas().style.cursor = "pointer"; });
+      map.on("mouseleave", "prediction-overlay", () => { map.getCanvas().style.cursor = ""; });
+
 
       // Zoom into clusters on click
       map.on("click", "traffic-clusters", async (e: mapboxgl.MapMouseEvent & { features?: mapboxgl.MapboxGeoJSONFeature[] }) => {
@@ -622,7 +935,12 @@ export default function RealTimeTraffic() {
           const newTrains = await fetchRealTimeTrains();
           if (newTrains.length > 0) {
             trains = newTrains;
+            updateDelayHistory(trains);
+            refreshSeriesInput();
             updateSources();
+            trainsRef.current = trains;
+            try { setTrainList(toTrainListItems(trains)); } catch {}
+
             history.unshift(trains.map((p) => ({ ...p })));
             if (history.length > 31) history.pop();
             updateStats();
@@ -659,10 +977,7 @@ export default function RealTimeTraffic() {
           const weight = Math.min(1, Math.max(0, t.weight + (Math.random() - 0.5) * 0.2));
           return { ...t, lng, lat, speed, weight };
         });
-        const src = map.getSource("traffic") as mapboxgl.GeoJSONSource;
-        if (src) src.setData(toFC());
-        const csrc = map.getSource("traffic-cluster") as mapboxgl.GeoJSONSource | undefined;
-        if (csrc) csrc.setData(toFC());
+        updateSources();
         updateStats();
       }, 1000);
 
@@ -697,8 +1012,37 @@ export default function RealTimeTraffic() {
         try { toast.message("New train position received"); } catch {}
       });
       return () => { try { off?.(); } catch {} };
+
     } catch {}
   }, []);
+
+
+	  // Supabase Realtime: subscribe to delay history inserts
+	  useEffect(() => {
+	    try {
+	      const sb: any = (createSupabaseBrowser as any)?.();
+	      if (!sb) return;
+	      const chan = sb
+	        .channel('public:train_delay_history')
+	        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'train_delay_history' }, (payload: any) => {
+	          try {
+	            const r = payload?.new || {};
+	            const id = String(r.train_id || '');
+	            if (!id) return;
+	            const val = Number(r.delay_minutes || 0);
+	            const map = delayHistoryRef.current;
+	            const arr = map.get(id) ?? [];
+	            arr.push(Number.isFinite(val) ? val : 0);
+	            while (arr.length > 15) arr.shift();
+	            map.set(id, arr);
+	            refreshSeriesInput();
+	          } catch {}
+	        })
+	        .subscribe();
+	      return () => { try { sb.removeChannel(chan); } catch {} };
+	    } catch {}
+	  }, []);
+
 
 
   if (!TOKEN) {
@@ -713,34 +1057,51 @@ export default function RealTimeTraffic() {
   }
 
   return (
-    <div className="w-full h-[72vh] rounded border border-neutral-800 overflow-hidden relative">
-      <div ref={ref} className="w-full h-full" />
-      <div className="absolute top-4 right-4 bg-neutral-900/90 border border-neutral-800 rounded p-3 text-xs space-y-2 backdrop-blur-sm">
-        <div className="font-medium text-neutral-200">Real-time Legend</div>
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-            <span className="text-neutral-300">On Time (0-5 min delay)</span>
+    <PredictionErrorBoundary>
+      <div className="w-full h-[72vh] rounded border border-neutral-800 overflow-hidden relative">
+        <div ref={ref} className="w-full h-full" />
+        <div className="absolute top-4 right-4 bg-neutral-900/90 border border-neutral-800 rounded p-3 text-xs space-y-2 backdrop-blur-sm">
+          <div className="font-medium text-neutral-200">Real-time Legend</div>
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+              <span className="text-neutral-300">On Time (0-5 min delay)</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
+              <span className="text-neutral-300">Minor Delay (5-10 min)</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-orange-500 rounded-full"></div>
+              <span className="text-neutral-300">Delayed (10-30 min)</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+              <span className="text-neutral-300">Severely Delayed (30+ min)</span>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-            <span className="text-neutral-300">Minor Delay (5-10 min)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 bg-orange-500 rounded-full"></div>
-            <span className="text-neutral-300">Delayed (10-30 min)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-            <span className="text-neutral-300">Severely Delayed (30+ min)</span>
+          <div className="pt-2 border-t border-neutral-700 text-neutral-400 space-y-1">
+            <div className="font-medium text-neutral-200">Predictions</div>
+            <div className="flex gap-2 flex-wrap">
+              <span className="px-1.5 py-0.5 rounded text-xs bg-green-500/10 text-green-400">5m</span>
+              <span className="px-1.5 py-0.5 rounded text-xs bg-yellow-500/10 text-yellow-400">15m</span>
+              <span className="px-1.5 py-0.5 rounded text-xs bg-orange-500/10 text-orange-400">30m</span>
+              <span className="text-xs text-neutral-400">Badges show forecasted delay by horizon; arrows indicate trend.</span>
+            </div>
+            <div className="pt-1">Heat map: Train density</div>
+            <div>Clusters: Multiple trains</div>
           </div>
         </div>
-        <div className="pt-2 border-t border-neutral-700 text-neutral-400">
-          <div>Heat map: Train density</div>
-          <div>Clusters: Multiple trains</div>
+        {/* Train list with predictions and accuracy panel */}
+        <div className="absolute bottom-4 left-4 w-[380px] space-y-3 pointer-events-auto">
+          <PredictionAccuracyPanel />
+          <div className="bg-neutral-900/90 border border-neutral-800 rounded-lg overflow-hidden backdrop-blur-sm">
+            <LazyVirtualizedTrainList trains={trainList} predictions={predictionsForList} />
+          </div>
         </div>
+
       </div>
-    </div>
+    </PredictionErrorBoundary>
   );
 }
 

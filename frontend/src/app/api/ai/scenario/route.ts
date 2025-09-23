@@ -59,9 +59,13 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { scenario, context } = body;
 
-    if (!scenario || typeof scenario !== 'string') {
-      return NextResponse.json({ error: 'Scenario description is required' }, { status: 400 });
+    const scenarioPayload = scenario;
+    if (!scenarioPayload) {
+      return NextResponse.json({ error: 'Scenario is required' }, { status: 400 });
     }
+    const scenarioText = typeof scenarioPayload === 'string'
+      ? scenarioPayload
+      : ((scenarioPayload.name || 'Scenario') + ' (' + (scenarioPayload.type || 'custom') + ', ' + (scenarioPayload.severity || 'medium') + ') - ' + (scenarioPayload.description || '') + '. Parameters: ' + JSON.stringify(scenarioPayload.parameters || {}) + (scenarioPayload.duration ? (', Duration: ' + scenarioPayload.duration + 'm') : '') + (scenarioPayload.location ? (', Location: ' + scenarioPayload.location) : ''));
 
     // Build system context
     const systemContext: SystemContext = {
@@ -75,16 +79,16 @@ export async function POST(request: NextRequest) {
     };
 
     // Generate scenario impact analysis
-    const analysis = await geminiService.explainScenarioImpact(scenario, systemContext);
+    const analysis = await geminiService.explainScenarioImpact(scenarioText, systemContext);
 
     // Store scenario analysis for future reference (only if Supabase is configured)
     if (hasClerk && userId !== 'dev-user') {
       try {
         const supabase = createSupabaseServer();
         await supabase.from('scenarios').insert({
-          name: scenario.substring(0, 100), // Truncate for storage
+          name: (typeof scenarioPayload === 'string' ? scenarioPayload : (scenarioPayload.name || 'Scenario')).substring(0, 100), // Truncate for storage
           payload: {
-            scenario,
+            scenario: scenarioPayload,
             analysis,
             context: systemContext,
             user_id: userId,
@@ -109,7 +113,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({
-      scenario,
+      scenario: scenarioPayload,
       analysis,
       context: systemContext,
       timestamp: new Date().toISOString()

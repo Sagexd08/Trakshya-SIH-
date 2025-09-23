@@ -45,6 +45,7 @@ export interface VirtualizedTrainListProps {
   onTrainSelect?: (trainId: string) => void;
   searchQuery?: string;
   statusFilter?: string[];
+  predictions?: Record<string, number[]>; // optional LSTM forecasts per train id
 }
 
 // Generic virtualized list component
@@ -252,6 +253,7 @@ export function VirtualizedTrainList({
   onTrainSelect,
   searchQuery = '',
   statusFilter = [],
+  predictions,
 }: VirtualizedTrainListProps) {
   const filterFn = useCallback((train: any, query: string) => {
     const matchesSearch = train.name.toLowerCase().includes(query.toLowerCase()) ||
@@ -343,9 +345,42 @@ export function VirtualizedTrainList({
               {train.speed} km/h
             </div>
             <div className="text-xs text-neutral-500">
+
+
               ETA: {train.eta.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </div>
           </div>
+
+          {/* Prediction badges: 5m / 15m / 30m */}
+          <div className="hidden sm:flex items-center gap-1">
+            {(() => {
+              const f = predictions?.[train.id];
+              const entries: Array<{ label: string; idx: number }> = [
+                { label: '5m', idx: 1 },
+                { label: '15m', idx: 3 },
+                { label: '30m', idx: 5 },
+              ];
+              const chip = (label: string, idx: number) => {
+                const val = f && f.length > idx ? Math.round(Number(f[idx])) : null;
+                const prev = f && f.length > Math.max(0, idx - 1) ? Math.round(Number(f[Math.max(0, idx - 1)])) : null;
+                const trend = val != null && prev != null ? val - prev : null;
+                const arrow = trend == null ? '\u2192' : trend < 0 ? '\u2193' : trend > 0 ? '\u2191' : '\u2192';
+                const cls = val == null
+                  ? 'bg-neutral-700/40 text-neutral-400'
+                  : val >= 30 ? 'bg-red-500/10 text-red-400'
+                  : val >= 10 ? 'bg-orange-500/10 text-orange-400'
+                  : val >= 5 ? 'bg-yellow-500/10 text-yellow-400'
+                  : 'bg-green-500/10 text-green-400';
+                return (
+                  <span key={label} className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${cls}`}>
+                    {label}: {val != null ? `+${val}m` : 'N/A'} <span className="opacity-70">{val != null ? arrow : ''}</span>
+                  </span>
+                );
+              };
+              return entries.map(e => chip(e.label, e.idx));
+            })()}
+          </div>
+
 
           <div className={cn(
             "px-2 py-1 rounded text-xs font-medium",
@@ -375,6 +410,8 @@ export function VirtualizedTrainList({
       onItemClick={(train) => onTrainSelect?.(train.id)}
       className="bg-neutral-900 border border-neutral-700 rounded-lg"
       emptyComponent={
+
+
         <div className="text-center py-8">
           <div className="text-4xl mb-2">🚂</div>
           <p className="text-neutral-400">No trains found</p>

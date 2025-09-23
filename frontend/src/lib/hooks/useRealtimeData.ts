@@ -63,6 +63,8 @@ export function useRealtimeData<T = any>(
   const retryCountRef = useRef(0);
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
   // Fetch data from Supabase
   const fetchFromSupabase = useCallback(async (): Promise<T[]> => {
     try {
@@ -119,7 +121,7 @@ export function useRealtimeData<T = any>(
       // Fetch from Supabase if no cache data or cache disabled
       if (!fromCache) {
         data = await fetchFromSupabase();
-        
+
         // Cache the data if caching is enabled
         if (cacheEnabled && data.length > 0) {
           const cacheItems = data.map(item => ({
@@ -180,7 +182,7 @@ export function useRealtimeData<T = any>(
       if (retryCountRef.current < errorRetryCount) {
         retryCountRef.current++;
         const delay = errorRetryDelay * Math.pow(2, retryCountRef.current - 1); // Exponential backoff
-        
+
         retryTimeoutRef.current = setTimeout(() => {
           fetchData(false); // Don't use cache on retry
         }, delay);
@@ -275,9 +277,9 @@ export function useRealtimeData<T = any>(
         });
       } catch (error) {
         console.error(`Failed to setup real-time subscription for ${table}:`, error);
-        setState(prev => ({ 
-          ...prev, 
-          error: 'Failed to setup real-time connection' 
+        setState(prev => ({
+          ...prev,
+          error: 'Failed to setup real-time connection'
         }));
       }
     };
@@ -300,6 +302,30 @@ export function useRealtimeData<T = any>(
       fetchData();
     }
   }, [initialFetch, fetchData]);
+
+  // Fallback polling when realtime is disconnected
+  useEffect(() => {
+    if (!initialFetch) return;
+    // Start polling when disconnected
+    if (!state.isConnected) {
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = setInterval(() => {
+        fetchData(false);
+      }, 30000); // 30s SWR-like polling
+    } else {
+      // Stop polling when connected
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+    }
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+    };
+  }, [state.isConnected, initialFetch, fetchData]);
 
   // Optimistic update functions
   const addOptimisticUpdate = useCallback((item: T) => {
@@ -335,7 +361,7 @@ export function useRealtimeData<T = any>(
 
       setState(prev => ({
         ...prev,
-        data: prev.data.map((item: any) => 
+        data: prev.data.map((item: any) =>
           item.id === id ? updated : item
         )
       }));
