@@ -366,6 +366,10 @@ export default function DecisionCard({
           const isEditing = editingId === recommendation.id;
           const isExpanded = showDetails === recommendation.id;
 
+
+          // Coerce timestamp to Date for safe rendering (handles API JSON strings)
+          const ts = recommendation.timestamp ? new Date((recommendation as any).timestamp as any) : null;
+
           return (
             <motion.div
               key={recommendation.id}
@@ -406,7 +410,7 @@ export default function DecisionCard({
                           {recommendation.type}
                         </Badge>
                         <span className="text-xs text-neutral-500">
-                          {recommendation.timestamp.toLocaleTimeString()}
+                          {ts && !isNaN(ts.getTime()) ? ts.toLocaleTimeString() : ''}
                         </span>
                       </div>
                     </div>

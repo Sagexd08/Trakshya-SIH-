@@ -99,20 +99,58 @@ jest.mock('@supabase/supabase-js', () => ({
   })),
 }))
 
-// Mock Web APIs
-Object.defineProperty(window, 'matchMedia', {
-  writable: true,
-  value: jest.fn().mockImplementation(query => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addListener: jest.fn(), // deprecated
-    removeListener: jest.fn(), // deprecated
-    addEventListener: jest.fn(),
-    removeEventListener: jest.fn(),
-    dispatchEvent: jest.fn(),
-  })),
-})
+// Mock Web APIs (guard for node environment)
+if (typeof window !== 'undefined') {
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    value: jest.fn().mockImplementation(query => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: jest.fn(), // deprecated
+      removeListener: jest.fn(), // deprecated
+      addEventListener: jest.fn(),
+      removeEventListener: jest.fn(),
+      dispatchEvent: jest.fn(),
+    })),
+  })
+
+  // Mock Speech APIs
+  Object.defineProperty(window, 'SpeechRecognition', {
+    writable: true,
+    value: jest.fn().mockImplementation(() => ({
+      start: jest.fn(),
+      stop: jest.fn(),
+      abort: jest.fn(),
+      addEventListener: jest.fn(),
+      removeEventListener: jest.fn(),
+      continuous: false,
+      interimResults: false,
+      lang: 'en-US',
+      maxAlternatives: 1,
+      serviceURI: '',
+      grammars: null,
+    })),
+  })
+
+  Object.defineProperty(window, 'webkitSpeechRecognition', {
+    writable: true,
+    value: (window).SpeechRecognition,
+  })
+
+  Object.defineProperty(window, 'speechSynthesis', {
+    writable: true,
+    value: {
+      speak: jest.fn(),
+      cancel: jest.fn(),
+      pause: jest.fn(),
+      resume: jest.fn(),
+      getVoices: jest.fn(() => []),
+      addEventListener: jest.fn(),
+      removeEventListener: jest.fn(),
+    },
+  })
+}
 
 // Mock ResizeObserver
 global.ResizeObserver = jest.fn().mockImplementation(() => ({
@@ -127,42 +165,6 @@ global.IntersectionObserver = jest.fn().mockImplementation(() => ({
   unobserve: jest.fn(),
   disconnect: jest.fn(),
 }))
-
-// Mock Speech APIs
-Object.defineProperty(window, 'SpeechRecognition', {
-  writable: true,
-  value: jest.fn().mockImplementation(() => ({
-    start: jest.fn(),
-    stop: jest.fn(),
-    abort: jest.fn(),
-    addEventListener: jest.fn(),
-    removeEventListener: jest.fn(),
-    continuous: false,
-    interimResults: false,
-    lang: 'en-US',
-    maxAlternatives: 1,
-    serviceURI: '',
-    grammars: null,
-  })),
-})
-
-Object.defineProperty(window, 'webkitSpeechRecognition', {
-  writable: true,
-  value: window.SpeechRecognition,
-})
-
-Object.defineProperty(window, 'speechSynthesis', {
-  writable: true,
-  value: {
-    speak: jest.fn(),
-    cancel: jest.fn(),
-    pause: jest.fn(),
-    resume: jest.fn(),
-    getVoices: jest.fn(() => []),
-    addEventListener: jest.fn(),
-    removeEventListener: jest.fn(),
-  },
-})
 
 // Mock Mapbox GL
 jest.mock('mapbox-gl', () => ({

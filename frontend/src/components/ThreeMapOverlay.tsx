@@ -34,6 +34,7 @@ interface ThreeMapOverlayProps {
   followingTrain?: string | null;
   showConflicts?: boolean;
   showTrainPaths?: boolean;
+  onReady?: () => void;
 }
 
 // Convert lat/lng to Three.js world coordinates
@@ -304,9 +305,12 @@ export default function ThreeMapOverlay({
   selectedTrain,
   followingTrain,
   showConflicts = true,
-  showTrainPaths = true
+  showTrainPaths = true,
+  onReady
 }: ThreeMapOverlayProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => { try { onReady?.(); } catch {} }, [onReady]);
 
   // Sync canvas size with map
   useEffect(() => {
@@ -345,13 +349,13 @@ export default function ThreeMapOverlay({
     >
       <Canvas
         ref={canvasRef}
-        camera={{ 
-          position: [0, 50, 50], 
+        camera={{
+          position: [0, 50, 50],
           fov: 60,
           near: 0.1,
           far: 1000
         }}
-        style={{ pointerEvents: 'auto' }}
+        style={{ pointerEvents: 'none' }}
       >
         <ambientLight intensity={0.4} />
         <directionalLight position={[10, 10, 5]} intensity={1} />

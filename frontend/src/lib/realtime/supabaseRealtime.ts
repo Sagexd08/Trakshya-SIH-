@@ -61,16 +61,14 @@ class SupabaseRealtimeManager {
 
   private async checkConnection() {
     try {
-      // Simple ping to check if Supabase is reachable
-      const { error } = await this.supabase.from('profiles').select('id').limit(1);
-      
-      if (error && !this.connectionState.isConnected) {
-        this.handleDisconnection();
-      } else if (!error && !this.connectionState.isConnected) {
-        this.handleReconnection();
+      // Avoid noisy pings to non-existent tables; rely on channel status instead.
+      // If we are currently disconnected and have active listeners, attempt reconnect.
+      const hasListeners = this.listeners.size > 0 && Array.from(this.listeners.keys()).some(k => !k.startsWith('_'));
+      if (!this.connectionState.isConnected && hasListeners && !this.reconnectTimer) {
+        this.reconnectAll();
       }
-    } catch (error) {
-      this.handleDisconnection();
+    } catch {
+      // No-op: channel events will drive reconnection
     }
   }
 
@@ -229,18 +227,19 @@ class SupabaseRealtimeManager {
             console.log(`Subscribed to ${table} changes`);
           } else if (status === 'CHANNEL_ERROR') {
             this.connectionState.isConnected = false;
-            if (onError) onError(new Error(`Channel error for ${table}`));
             if (onDisconnect) onDisconnect();
-            console.error(`Channel error for ${table}`);
+            console.warn(`Realtime channel error for ${table} (will retry)`);
+            if (!this.reconnectTimer) this.reconnectAll();
           } else if (status === 'TIMED_OUT') {
             this.connectionState.isConnected = false;
-            if (onError) onError(new Error(`Subscription timeout for ${table}`));
             if (onDisconnect) onDisconnect();
-            console.error(`Subscription timeout for ${table}`);
+            console.warn(`Realtime subscription timed out for ${table} (will retry)`);
+            if (!this.reconnectTimer) this.reconnectAll();
           } else if (status === 'CLOSED') {
             this.connectionState.isConnected = false;
             if (onDisconnect) onDisconnect();
-            console.log(`Subscription closed for ${table}`);
+            console.log(`Realtime subscription closed for ${table}`);
+            if (!this.reconnectTimer) this.reconnectAll();
           }
         });
 
@@ -248,9 +247,10 @@ class SupabaseRealtimeManager {
       return subscriptionKey;
 
     } catch (error) {
-      console.error('Subscription error:', error);
-      if (onError) onError(error as Error);
-      throw error;
+      console.warn('Subscription setup error (will not crash):', error);
+      if (onDisconnect) onDisconnect();
+      // Do not throw in dev to avoid noisy overlay; retries will occur via checkConnection
+      return subscriptionKey;
     }
   }
 

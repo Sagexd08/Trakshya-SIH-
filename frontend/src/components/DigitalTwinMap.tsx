@@ -33,7 +33,23 @@ const ThreeMapOverlay = dynamic(() => import('./ThreeMapOverlay'), {
   </div>
 });
 
-const TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "";
+const RAW_TOKEN = (process.env.NODE_ENV !== 'production'
+  ? (process.env.NEXT_PUBLIC_MAPBOX_DEV_TOKEN || process.env.NEXT_PUBLIC_MAPBOX_TOKEN)
+  : process.env.NEXT_PUBLIC_MAPBOX_TOKEN) || "";
+
+const isSecret = RAW_TOKEN.startsWith('sk.');
+if (isSecret) {
+  if (process.env.NODE_ENV === 'production') {
+    // Prevent accidentally leaking a secret token in production
+    // Leave TOKEN empty so the map shows a clear configuration error
+    // and avoids sending the secret to the client runtime.
+    console.error('Secret Mapbox token detected in production. Configure a public pk token in NEXT_PUBLIC_MAPBOX_TOKEN.');
+  } else {
+    console.warn('Using a secret Mapbox token (sk...) in development. Do not use this in production.');
+  }
+}
+
+const TOKEN = (isSecret && process.env.NODE_ENV === 'production') ? '' : RAW_TOKEN;
 if (TOKEN) mapboxgl.accessToken = TOKEN;
 
 const TRACKS_URL = process.env.NEXT_PUBLIC_TRACKS_GEOJSON_URL || "/tracks-sample.geojson";
@@ -126,6 +142,22 @@ export default function DigitalTwinMap() {
     updateInterval: 30000,
     enableConflictDetection: true
   });
+
+  const [threeLoaded, setThreeLoaded] = useState(false);
+  // Safety: if 3D overlay doesn’t mount within a few seconds, disable it to avoid indefinite loading
+  useEffect(() => {
+    if (threeLoaded) return;
+    const t = setTimeout(() => {
+      if (!threeLoaded) {
+        setMapState(prev => ({
+          ...prev,
+          showLayers: { ...prev.showLayers, threejs: false }
+        }));
+        try { toast.warning('3D overlay unavailable. Disabled to keep the map responsive.'); } catch {}
+      }
+    }, 8000);
+    return () => clearTimeout(t);
+  }, [threeLoaded]);
 
   const [mapState, setMapState] = useState<MapState>({
     isPlaying: true,
@@ -258,6 +290,34 @@ export default function DigitalTwinMap() {
     }
   }, []);
 
+  const FLY_PATH: [number, number][] = [
+    [72.8777, 19.0760], // Mumbai
+    [75.0, 21.0],
+    [77.2090, 28.6139], // Delhi
+    [80.0, 26.0],
+    [88.3639, 22.5726] // Kolkata
+  ];
+
+  const startFlythrough = useCallback(async () => {
+    if (!mapRef.current) return;
+    const map = mapRef.current;
+    toast.info('Starting route flythrough');
+    for (const [lng, lat] of FLY_PATH) {
+      await new Promise<void>((resolve) => {
+        map.flyTo({
+          center: [lng, lat],
+          zoom: 6.5,
+          pitch: 55,
+          bearing: map.getBearing() + 20,
+          duration: 2500,
+        });
+        setTimeout(resolve, 2600);
+      });
+    }
+    toast.success('Flythrough complete');
+  }, []);
+
+
   const toggleLayer = useCallback((layer: keyof MapState['showLayers']) => {
     setMapState(prev => ({
       ...prev,
@@ -309,6 +369,23 @@ export default function DigitalTwinMap() {
       return;
     }
 
+    // Check Mapbox GL support (WebGL/hardware acceleration)
+    try {
+      // Prefer allowing contexts with performance caveats in dev so it still loads
+      if (!mapboxgl.supported({ failIfMajorPerformanceCaveat: false } as any)) {
+        setError("This browser/device does not support Mapbox GL (WebGL). Please enable hardware acceleration or try a different browser.");
+        setIsLoading(false);
+        return;
+      }
+    } catch {
+      // Older versions may not support the options argument
+      if (!mapboxgl.supported()) {
+        setError("This browser/device does not support Mapbox GL (WebGL). Please enable hardware acceleration or try a different browser.");
+        setIsLoading(false);
+        return;
+      }
+    }
+
     let animationTimer: ReturnType<typeof setInterval> | undefined;
 
     try {
@@ -319,7 +396,8 @@ export default function DigitalTwinMap() {
         zoom: 5,
         pitch: 45,
         bearing: -17.6,
-        antialias: true
+        antialias: true,
+        failIfMajorPerformanceCaveat: false
       });
 
       mapRef.current = map;
@@ -486,12 +564,13 @@ export default function DigitalTwinMap() {
 
         // Train click handlers
         map.on('click', 'trains-circle', (e) => {
-          if (e.features && e.features[0]) {
-            const feature = e.features[0];
-            const trainId = feature.properties?.id;
-            if (trainId) {
-              setMapState(prev => ({ ...prev, selectedTrain: trainId }));
-            }
+          const feature = Array.isArray((e as any).features) && (e as any).features.length > 0
+            ? (e as any).features[0]
+            : undefined;
+          if (!feature) return;
+          const trainId = feature.properties?.id;
+          if (trainId) {
+            setMapState(prev => ({ ...prev, selectedTrain: trainId }));
           }
         });
 
@@ -499,24 +578,28 @@ export default function DigitalTwinMap() {
         map.on('mouseenter', 'trains-circle', (e) => {
           map.getCanvas().style.cursor = 'pointer';
 
-          if (e.features && e.features[0]) {
-            const feature = e.features[0];
-            const coords = (feature.geometry as Point).coordinates as [number, number];
-            const props = feature.properties as TrainData;
+          const feature = Array.isArray((e as any).features) && (e as any).features.length > 0
+            ? (e as any).features[0]
+            : undefined;
+          if (!feature) return;
 
-            new mapboxgl.Popup({ closeButton: false })
-              .setLngLat(coords)
-              .setHTML(`
-                <div class="p-2 text-sm">
-                  <div class="font-semibold">Train ${props.id}</div>
-                  <div>Speed: ${props.speedKmph} km/h</div>
-                  <div>Delay: ${props.delayMin} min</div>
-                  <div>Efficiency: ${props.energyEfficiency}%</div>
-                  ${props.nextStation ? `<div>Next: ${props.nextStation}</div>` : ''}
-                </div>
-              `)
-              .addTo(map);
-          }
+          const geom = (feature as any).geometry as Point | undefined;
+          const props = (feature as any).properties as TrainData | undefined;
+          if (!geom || !props || !Array.isArray((geom as any).coordinates)) return;
+          const coords = (geom as any).coordinates as [number, number];
+
+          new mapboxgl.Popup({ closeButton: false })
+            .setLngLat(coords)
+            .setHTML(`
+              <div class="p-2 text-sm">
+                <div class="font-semibold">Train ${props.id}</div>
+                <div>Speed: ${props.speedKmph} km/h</div>
+                <div>Delay: ${props.delayMin} min</div>
+                <div>Efficiency: ${props.energyEfficiency}%</div>
+                ${props.nextStation ? `<div>Next: ${props.nextStation}</div>` : ''}
+              </div>
+            `)
+            .addTo(map);
         });
 
         map.on('mouseleave', 'trains-circle', () => {
@@ -622,7 +705,7 @@ export default function DigitalTwinMap() {
         <div className="text-center text-sm">
           <AlertTriangle className="mx-auto mb-2" size={24} />
           Mapbox token not set.<br/>
-          Set NEXT_PUBLIC_MAPBOX_TOKEN to view the 3D Digital Twin map.
+          Set NEXT_PUBLIC_MAPBOX_TOKEN to a public pk token to view the 3D Digital Twin map.
         </div>
       </div>
     );
@@ -655,11 +738,6 @@ export default function DigitalTwinMap() {
 
       {/* Three.js Overlay */}
       {mapRef.current && mapState.showLayers.threejs && (
-        <Suspense fallback={
-          <div className="absolute inset-0 bg-black/20 flex items-center justify-center z-10">
-            <div className="text-white text-sm">Loading 3D visualization...</div>
-          </div>
-        }>
           <ThreeMapOverlay
             map={mapRef.current}
             trains={trains}
@@ -668,8 +746,8 @@ export default function DigitalTwinMap() {
             followingTrain={mapState.followingTrain}
             showConflicts={mapState.showLayers.conflicts}
             showTrainPaths={true}
+            onReady={() => setThreeLoaded(true)}
           />
-        </Suspense>
       )}
 
       {/* Loading Overlay */}
@@ -704,6 +782,16 @@ export default function DigitalTwinMap() {
               >
                 <RotateCcw size={16} />
               </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={startFlythrough}
+                className="h-8 w-8"
+                title="Start flythrough"
+              >
+                <Maximize2 size={16} />
+              </Button>
+
               <div className="h-4 w-px bg-neutral-700 mx-1" />
               <div className="text-xs text-neutral-400">
                 {mapState.isPlaying ? "Live" : "Paused"}

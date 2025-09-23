@@ -224,9 +224,10 @@ export const railwayApi = createApi({
       hours?: number;
     }>({
       query: (params = {}) => ({
-        url: '/api/energy/series',
+        // Note: baseUrl already points to /api, so avoid double-prefix
+        url: '/energy/series',
         params: {
-          stations: 'NDLS,CSMT,HWH',
+          station_codes: 'NDLS,CSMT,HWH',
           hours: 2,
           ...params,
         },
@@ -246,7 +247,8 @@ export const railwayApi = createApi({
       hours?: number;
     }>({
       query: ({ stationCode, hours = 2 }) => ({
-        url: '/api/irctc/live-station',
+        // Note: baseUrl already points to /api, so avoid double-prefix
+        url: '/irctc/live-station',
         params: { station_code: stationCode, hours },
       }),
       keepUnusedDataFor: 60, // 1 minute for live data

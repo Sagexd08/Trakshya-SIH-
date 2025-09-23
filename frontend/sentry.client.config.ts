@@ -8,6 +8,8 @@ if (process.env.NEXT_PUBLIC_SENTRY_DSN) {
     integrations: [],
     enabled: true,
     environment: process.env.NODE_ENV,
+    // Send events through same-origin tunnel to avoid CSP and adblock issues
+    tunnel: '/monitoring',
   });
 }
 

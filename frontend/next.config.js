@@ -1,5 +1,10 @@
 /** @type {import('next').NextConfig} */
 const { withSentryConfig } = require('@sentry/nextjs');
+// Prevent leaking Mapbox secret tokens in production builds
+if (process.env.NODE_ENV === 'production' && process.env.NEXT_PUBLIC_MAPBOX_TOKEN && process.env.NEXT_PUBLIC_MAPBOX_TOKEN.startsWith('sk.')) {
+  throw new Error('Refusing to build with a secret Mapbox token (sk...). Set NEXT_PUBLIC_MAPBOX_TOKEN to a public pk token for production.');
+}
+
 
 const nextConfig = {
   // Enable experimental features
@@ -12,6 +17,15 @@ const nextConfig = {
 
   // External packages for server components
   serverExternalPackages: ['@google/generative-ai'],
+
+  // Ensure ESM libs with web workers are transpiled correctly in Next/webpack
+  transpilePackages: [
+    'troika-three-text',
+    'troika-three-utils',
+    'troika-worker-utils',
+    '@react-three/fiber',
+    '@react-three/drei'
+  ],
 
   // Performance optimizations
   compiler: {
@@ -53,7 +67,7 @@ const nextConfig = {
           },
           {
             key: 'Content-Security-Policy',
-            value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://vercel.live https://cdn.vercel-insights.com https://js.sentry-cdn.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https://api.mapbox.com https://tiles.mapbox.com; connect-src 'self' https://api.mapbox.com https://tiles.mapbox.com https://*.supabase.co https://*.supabase.in https://o*.ingest.sentry.io; font-src 'self' https://fonts.gstatic.com; worker-src 'self' blob:; frame-ancestors 'none'; object-src 'none'",
+            value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://vercel.live https://cdn.vercel-insights.com https://js.sentry-cdn.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https://api.mapbox.com https://*.tiles.mapbox.com; connect-src 'self' https://api.mapbox.com https://*.tiles.mapbox.com https://events.mapbox.com https://*.supabase.co https://*.supabase.in https://*.ingest.sentry.io https://*.sentry.io ws: wss:; font-src 'self' https://fonts.gstatic.com https://api.mapbox.com; worker-src 'self' blob:; frame-ancestors 'none'; object-src 'none'",
           },
           // Performance headers
           {
@@ -99,17 +113,6 @@ const nextConfig = {
       );
     }
 
-    // Web Workers support
-    config.module.rules.push({
-      test: /\.worker\.(js|ts)$/,
-      use: {
-        loader: 'worker-loader',
-        options: {
-          name: 'static/[hash].worker.js',
-          publicPath: '/_next/',
-        },
-      },
-    });
 
     // Optimize imports
     config.resolve.alias = {
@@ -174,6 +177,10 @@ const nextConfig = {
 
   // PWA configuration
   async rewrites() {
+    // Avoid registering a service worker during development to prevent cache issues
+    if (process.env.NODE_ENV !== 'production') {
+      return [];
+    }
     return [
       {
         source: '/sw.js',
@@ -190,13 +197,13 @@ const nextConfig = {
   // Output configuration
   output: 'standalone',
   outputFileTracingRoot: __dirname,
-  
+
   // Compression
   compress: true,
 
   // Power optimizations
   poweredByHeader: false,
-  
+
   // Strict mode
   reactStrictMode: true,
 
